@@ -6,11 +6,15 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-extern xSemaphoreHandle xSemaphoreEM7180Interrupt;
+#include "types.h"
+
+
+
+void EM7180Task(void *pvParameters);
 
 void EM7180_InterruptCallback();
 
-bool EM7180_Init(int8_t interruptPin); // TODO: no pin
+bool EM7180_Init();
 bool EM7180_EEPROM(void);
 bool EM7180_Passthru_begin(void);
 
@@ -29,22 +33,20 @@ bool EM7180_hasCustom1(void);
 bool EM7180_hasCustom2(void);
 bool EM7180_hasCustom3(void);
 
-//bool EM7180_begin(int8_t pin=-1);
 void EM7180_checkEventStatus(void);
 bool EM7180_gotError(void);
-//bool EM7180_gotInterrupt(void);
 bool EM7180_gotQuaternion(void);
 bool EM7180_gotMagnetometer(void);
 bool EM7180_gotAccelerometer(void);
 bool EM7180_gotGyrometer(void);
 bool EM7180_gotBarometer(void);
 void EM7180_readMagnetometer(int16_t *mx, int16_t *my, int16_t *mz);
-void EM7180_EM7180_readAccelerometer(int16_t *ax, int16_t *ay, int16_t *az);
+void EM7180_readAccelerometer(int16_t *ax, int16_t *ay, int16_t *az);
 void EM7180_readGyrometer(int16_t *gx, int16_t *gy, int16_t *gz);
 void EM7180_readQuaternion(float *qw, float *qx, float *qy, float *qz);
 void EM7180_readBarometer(float *pressure, float *temperature);
 uint8_t EM7180_getActualMagRate();
-uint16_t EM7180_EM7180_getActualAccelRate();
+uint16_t EM7180_getActualAccelRate();
 uint16_t EM7180_getActualGyroRate();
 uint8_t EM7180_getActualBaroRate();
 uint8_t EM7180_getActualTempRate();

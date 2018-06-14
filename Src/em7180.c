@@ -1,28 +1,30 @@
 /* 
 
-   EM7180.cpp: Class implementation for EM7180 SENtral Sensor
+EM7180.cpp: Class implementation for EM7180 SENtral Sensor
 
-   Adapted from
+Adapted from
 
-     https://raw.githubusercontent.com/kriswiner/Teensy_Flight_Controller/master/EM7180_MPU9250_BMP280
+https://raw.githubusercontent.com/kriswiner/Teensy_Flight_Controller/master/EM7180_MPU9250_BMP280
 
-   This file is part of EM7180.
+This file is part of EM7180.
 
-   EM7180 is free software: you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation, either version 3 of the License, or
-   (at your option) any later version.
+EM7180 is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
 
-   EM7180 is distributed in the hope that it will be useful,
-   but WITHOUT ANY WARRANTY; without even the implied warranty of
-   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
-   You should have received a copy of the GNU General Public License
-   along with EM7180.  If not, see <http://www.gnu.org/licenses/>.
+EM7180 is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+You should have received a copy of the GNU General Public License
+along with EM7180.  If not, see <http://www.gnu.org/licenses/>.
 */
 
 #include "stm32f4xx_hal.h"
 #include "cmsis_os.h"
+
+#include "math.h"
 
 #include "hardware.h"
 #include "em7180.h"
@@ -108,8 +110,20 @@
 #define AK8963_ADDRESS           0x0C   // Address of magnetometer
 #define BMP280_ADDRESS           0x76   // Address of BMP280 altimeter when ADO = 0
 
-xSemaphoreHandle xSemaphoreEM7180Interrupt = NULL;
-         
+#ifndef M_PI
+#define M_PI 3.14159265358979
+#endif       
+
+// Are these static for the EM7180?
+#define ACC_SCALE   2048
+#define GYRO_SCALE  65536
+// Input Semaphore
+extern xSemaphoreHandle xSemaphoreEM7180Interrupt;
+// Output Queues
+extern xQueueHandle xQueueEM7180ToAlt;
+extern xQueueHandle xQueueEM7180ToQuad;
+
+
 static uint8_t _eventStatus;
 
 static bool algorithmStatus(uint8_t status);
@@ -131,42 +145,53 @@ static void readThreeAxis(uint8_t xreg, int16_t *x, int16_t *y, int16_t *z);
 
 I2C_HandleTypeDef i2c_temp;
 
-void EM7180_InterruptCallback()
+/*void EM7180_InterruptCallback()
 {
-    portBASE_TYPE xHigherPriorityTaskWoken = pdFALSE;
-    xSemaphoreGiveFromISR(xSemaphoreEM7180Interrupt, &xHigherPriorityTaskWoken);
-    
-    
-    if (xHigherPriorityTaskWoken != pdFALSE) {
-        portEND_SWITCHING_ISR(xHigherPriorityTaskWoken);
+portBASE_TYPE xHigherPriorityTaskWoken = pdFALSE;
+
+// Give interrupt to start off the EM7180 task
+xSemaphoreGiveFromISR(xSemaphoreEM7180Interrupt, &xHigherPriorityTaskWoken);
+
+if (xHigherPriorityTaskWoken != pdFALSE) {
+portEND_SWITCHING_ISR(xHigherPriorityTaskWoken);
     }
-}
+}*/
 
 
 void delay(uint32_t milliseconds)
 {
     osDelay(milliseconds);
 }
-       
-    
+
+
 void writeByte(uint8_t address, uint8_t subAddress, uint8_t data)
 {
     uint8_t data_send[2];
     data_send[0] = subAddress;
     data_send[1] = data;
+    
+    //xSemaphoreTake(xMutexI2C, portMAX_DELAY);
     HAL_I2C_Master_Transmit(&hi2c3, (uint16_t)address << 1, data_send, 2, 1000);
+    //xSemaphoreGive(xMutexI2C);
+    //HAL_I2C_Mem_Write(&hi2c3, (uint16_t)address << 1, (uint16_t)subAddress, 1, /* &?*/data, 1, 1000);
 }
 
 uint8_t readByte(uint8_t address, uint8_t subAddress)
 {
     uint8_t data_receive;
+    
+    //xSemaphoreTake(xMutexI2C, portMAX_DELAY);
     uint8_t HAL_return = HAL_I2C_Mem_Read(&hi2c3, (uint16_t)address << 1, subAddress, 1, &data_receive, 1, 1000);
+    //xSemaphoreGive(xMutexI2C);
+    
     return data_receive;
 }
 
 void readBytes(uint8_t address, uint8_t subAddress, uint8_t count, uint8_t *data_receive)
 {  
+    //xSemaphoreTake(xMutexI2C, portMAX_DELAY);
     HAL_I2C_Mem_Read(&hi2c3, (uint16_t)address << 1, subAddress, 1, data_receive, count, 1000);
+    //xSemaphoreGive(xMutexI2C);
 }
 
 float uint32_reg_to_float (uint8_t *buf)
@@ -175,11 +200,11 @@ float uint32_reg_to_float (uint8_t *buf)
         uint32_t ui32;
         float f;
     } u;
-
+    
     u.ui32 =     (((uint32_t)buf[0]) +
-            (((uint32_t)buf[1]) <<  8) +
-            (((uint32_t)buf[2]) << 16) +
-            (((uint32_t)buf[3]) << 24));
+                  (((uint32_t)buf[1]) <<  8) +
+                      (((uint32_t)buf[2]) << 16) +
+                          (((uint32_t)buf[3]) << 24));
     return u.f;
 }
 
@@ -271,7 +296,7 @@ bool algorithmStatus(uint8_t status)
 
 void interruptHandler()
 {
-    newData = true;
+newData = true;
 }*/
 
 // public methods ========================================================================================================
@@ -298,13 +323,13 @@ bool EM7180_EEPROM(void)
         writeByte(EM7180_ADDRESS, EM7180_ResetRequest, 0x01);
         delay(500);  
     }
-
-
+    
+    
     if (readByte(EM7180_ADDRESS, EM7180_SentralStatus) & 0x04) {
         errorStatus = 0xB0;
         return false;
     }
-
+    
     return true;
 }
 
@@ -318,12 +343,12 @@ const char *EM7180_getErrorString(void)
     if (errorStatus & 0x30) return "Math error";
     if (errorStatus & 0x40) return "Gyro ID not recognized";
     if (errorStatus & 0x80) return "Invalid sample rate";
-
+    
     // Ad-hoc
     if (errorStatus & 0x90) return "Failed to put SENtral in pass-through mode";
     if (errorStatus & 0xA0) return "Unable to read from SENtral EEPROM";
     if (errorStatus & 0xB0) return "Unable to upload config to SENtral EEPROM";
-
+    
     return "Unknown error";
 }
 
@@ -372,7 +397,7 @@ uint16_t EM7180_getRamVersion(void)
 {
     uint16_t ram1 = readByte(EM7180_ADDRESS, EM7180_RAMVersion1);
     uint16_t ram2 = readByte(EM7180_ADDRESS, EM7180_RAMVersion2);
-
+    
     return ram1 << 8 | ram2;
 }
 
@@ -380,7 +405,7 @@ uint16_t EM7180_getRomVersion(void)
 {
     uint16_t rom1 = readByte(EM7180_ADDRESS, EM7180_ROMVersion1);
     uint16_t rom2 = readByte(EM7180_ADDRESS, EM7180_ROMVersion2);
-
+    
     return rom1 << 8 | rom2;
 }
 
@@ -397,7 +422,7 @@ bool EM7180_Passthru_begin(void)
 {
     // Do generic intialization
     if (!EM7180_EEPROM()) return false;
-
+    
     // First put SENtral in standby mode
     uint8_t c = readByte(EM7180_ADDRESS, EM7180_AlgorithmControl);
     writeByte(EM7180_ADDRESS, EM7180_AlgorithmControl, c | 0x01);
@@ -411,87 +436,77 @@ bool EM7180_Passthru_begin(void)
         errorStatus = 0x90;
         return false;
     }
-
+    
     uint8_t data[128];
     M24512DFMreadBytes(M24512DFM_DATA_ADDRESS, 0x00, 0x00, 128, data);
     if (data[0] != 0x2A || data[1] != 0x65) {
         errorStatus = 0xA0;
         return false;
     }
-
+    
     // Success
     return true;
 }
 
 
-bool EM7180_Init(int8_t interruptPin)
+bool EM7180_Init()
 {
+    HAL_Delay(500);
     // Sensible defaults for sensor ranges
     uint8_t  aRes = 8;    // Gs
     uint16_t gRes = 2000; // radians per second
     uint16_t mRes = 1000; // microTeslas
-
+    
     // Sensible defaults for sensor Output Data Rates (ODRs)
     uint8_t  magRate      = 100; // Hz
     uint16_t accelRate    = 250; // Hz
     uint16_t gyroRate     = 250; // Hz
     uint8_t  baroRate     = 50;  // Hz
     uint8_t  qRateDivisor = 1;   // 1/3 gyro rate
-
+    
     // Fail immediately if unable to upload EEPROM
     if (!EM7180_EEPROM()){
-        
         return false;
     }
-
+    
     // Enter EM7180 initialized state
     writeByte(EM7180_ADDRESS, EM7180_HostControl, 0x00); // set SENtral in initialized state to configure registers
     writeByte(EM7180_ADDRESS, EM7180_PassThruControl, 0x00); // make sure pass through mode is off
     writeByte(EM7180_ADDRESS, EM7180_HostControl, 0x01); // Force initialize
     writeByte(EM7180_ADDRESS, EM7180_HostControl, 0x00); // set SENtral in initialized state to configure registers
-
+    
     // Setup LPF bandwidth (BEFORE setting ODR's)
     writeByte(EM7180_ADDRESS, EM7180_ACC_LPF_BW, 0x03);  // 41Hz
     writeByte(EM7180_ADDRESS, EM7180_GYRO_LPF_BW, 0x03); // 41Hz
-
+    
     // Set accel/gyro/mage desired ODR rates
     writeByte(EM7180_ADDRESS, EM7180_QRateDivisor, qRateDivisor-1);    
     writeByte(EM7180_ADDRESS, EM7180_MagRate, magRate);
     writeByte(EM7180_ADDRESS, EM7180_AccelRate, accelRate/10); 
     writeByte(EM7180_ADDRESS, EM7180_GyroRate, gyroRate/10);   
     writeByte(EM7180_ADDRESS, EM7180_BaroRate, 0x80 | baroRate); // 0x80 = enable bit
-
+    
     // Configure operating mode
     writeByte(EM7180_ADDRESS, EM7180_AlgorithmControl, 0x00); // read scale sensor data
-
+    
     // Enable interrupt to host upon certain events:
     // quaternions updated (0x04), an error occurs (0x02), or the SENtral needs to be reset(0x01)
     writeByte(EM7180_ADDRESS, EM7180_EnableEvents, 0x07);
-
+    
     // Enable EM7180 run mode
     writeByte(EM7180_ADDRESS, EM7180_HostControl, 0x01); // set SENtral in normal run mode
     delay(100);
-
+    
     // Disable stillness mode
     setIntegerParam (0x49, 0x00);
-
+    
     // Write desired sensor full scale ranges to the EM7180
     setMagAccFs(mRes, aRes);
     setGyroFs(gRes); 
-
-    if (interruptPin >= 0) {
-
-        // TODO: setup interrupt pin
-        // Set up the interrupt pin: active high, push-pull
-        //pinMode(interruptPin, INPUT);
-        //attachInterrupt(interruptPin, interruptHandler, RISING);  // define interrupt for INT pin output of EM7180
-
-        // Check event status register to clear the EM7180 interrupt before the main loop
-        readByte(EM7180_ADDRESS, EM7180_EventStatus); // reading clears the register and interrupt
-
-        //newData = false;
-    }
-
+    // Check event status register to clear the EM7180 interrupt before the main loop
+    readByte(EM7180_ADDRESS, EM7180_EventStatus); // reading clears the register and interrupt
+    
+    
     // If readByte() returns 0, return true
     return readByte(EM7180_ADDRESS, EM7180_SensorStatus) ? false : true;
 }
@@ -499,7 +514,7 @@ bool EM7180_Init(int8_t interruptPin)
 void EM7180_getFullScaleRanges(uint8_t *accFs, uint16_t *gyroFs, uint16_t *magFs)
 {
     uint8_t param[4];
-
+    
     // Read sensor new FS values from parameter space
     writeByte(EM7180_ADDRESS, EM7180_ParamRequest, 0x4A); // Request to read  parameter 74
     writeByte(EM7180_ADDRESS, EM7180_AlgorithmControl, 0x80); // Request parameter transfer process
@@ -566,16 +581,16 @@ void EM7180_checkEventStatus(void)
 {
     // Check event status register, way to check data ready by checkEventStatusing rather than interrupt
     _eventStatus = readByte(EM7180_ADDRESS, EM7180_EventStatus); // reading clears the register
-
+    
 }
 
 bool EM7180_gotError(void)
 {
     if (_eventStatus & 0x02) {
-
+        
         return true;
     }
-
+    
     return false;
 }
 
@@ -607,9 +622,9 @@ bool EM7180_gotBarometer(void)
 void EM7180_readQuaternion(float *qw, float *qx, float *qy, float *qz)
 {
     uint8_t rawData[16];  // x/y/z/w quaternion register data stored here (note unusual order!)
-
+    
     readBytes(EM7180_ADDRESS, EM7180_QX, 16, rawData);       
-
+    
     *qx = uint32_reg_to_float(&rawData[0]);
     *qy = uint32_reg_to_float(&rawData[4]);
     *qz = uint32_reg_to_float(&rawData[8]);
@@ -634,16 +649,16 @@ void EM7180_readMagnetometer(int16_t *mx, int16_t *my, int16_t *mz)
 
 void EM7180_readBarometer(float *pressure, float *temperature)
 {
-    uint8_t rawData[2];  // x/y/z gyro register data stored here
-
+    uint8_t rawData[2];
+    
     readBytes(EM7180_ADDRESS, EM7180_Baro, 2, rawData);  // Read the two raw data registers sequentially into data array
     int16_t rawPressure =  (int16_t) (((int16_t)rawData[1] << 8) | rawData[0]);   // Turn the MSB and LSB into a signed 16-bit value
     *pressure = (float)rawPressure *.01f + 1013.25f; // pressure in millibars
-
+    
     // get BMP280 temperature
     readBytes(EM7180_ADDRESS, EM7180_Temp, 2, rawData);  // Read the two raw data registers sequentially into data array
     int16_t rawTemperature =  (int16_t) (((int16_t)rawData[1] << 8) | rawData[0]);   // Turn the MSB and LSB into a signed 16-bit value
-
+    
     *temperature = (float) rawTemperature*0.01;  // temperature in degrees C
 }
 
@@ -672,8 +687,116 @@ uint8_t EM7180_getActualTempRate()
     return readByte(EM7180_ADDRESS, EM7180_ActualTempRate);
 }
 
-/*bool EM7180_gotInterrupt(void)
-{
-    return newData;
-}*/
 
+void EM7180Task(void *pvParameters)
+{
+    // Data to be sent to Quadcopter task
+    attitude_data_t attitude_data;
+    // Data to be sent to Altitude task
+    altitude_data_t altitude_data;
+    //  Data to be sent to Heading task
+    heading_data_t heading_data;
+    // Quaternions
+    float qw, qx, qy, qz;
+    // Acceleration in m/s^2 adjusted without gravity
+    float acc_x, acc_y, acc_z;
+    // Gyro in m/s (drift free from EM7180?)
+    float gyro_x, gyro_y, gyro_z;
+    // Angles in degrees
+    float yaw, pitch, roll;
+    // 
+    float a1, a2, a3;
+    
+	while(1){
+        if(xSemaphoreTake(xSemaphoreEM7180Interrupt, 50)){
+            HAL_GPIO_WritePin(GPIOD, LD3_Pin, GPIO_PIN_SET);
+            EM7180_checkEventStatus();
+            
+            if (EM7180_gotError()) {  
+                UART_Print("EM7180 error: ");
+                UART_Print(EM7180_getErrorString());
+            }
+            
+            if (EM7180_gotQuaternion()) {             
+                EM7180_readQuaternion(&qw, &qx, &qy, &qz);
+                
+                roll  = atan2(2.0f * (qw * qx + qy * qz), qw * qw - qx * qx - qy * qy + qz * qz);
+                pitch = -asin(2.0f * (qx * qz - qw * qy));
+                yaw   = atan2(2.0f * (qx * qy + qw * qz), qw * qw + qx * qx - qy * qy - qz * qz);   
+                
+                pitch *= 180.0f / M_PI;
+                yaw   *= 180.0f / M_PI; 
+                //yaw   += 13.8f; // Declination at Danville, California is 13 degrees 48 minutes and 47 seconds on 2014-04-04
+                if(yaw < 0) yaw += 360.0f; // Ensure yaw stays between 0 and 360
+                roll  *= 180.0f / M_PI;
+                
+                attitude_data.quaternions.yaw = yaw;
+                attitude_data.quaternions.pitch = pitch;
+                attitude_data.quaternions.roll = roll;
+                
+                //xQueueSend(xQueueEM7180ToQuad, &attitude_data, 0);
+                //UART_Print("yaw: %.3f ", yaw);
+                //UART_Print("pitch: %.3f ", pitch);
+                //UART_Print("roll: %.3f\n\r", roll);
+            }
+            
+            if (EM7180_gotGyrometer()) { // 250Hz
+                int16_t gx, gy, gz;
+                EM7180_readGyrometer(&gx, &gy, &gz);
+                // Scale the raw gyro into ? TODO: m/s?
+                gyro_x = (float)gx / GYRO_SCALE; 
+                gyro_y = (float)gy / GYRO_SCALE; 
+                gyro_z = (float)gz / GYRO_SCALE; 
+                
+                attitude_data.gyro.x = gyro_x;
+                attitude_data.gyro.y = gyro_y;
+                attitude_data.gyro.z = gyro_z;
+            }
+            // Pass quaternions and gyro to quadcopter task
+            xQueueSend(xQueueEM7180ToQuad, &attitude_data, 0);
+            
+            if (EM7180_gotAccelerometer()){ // 250Hz
+                int16_t ax, ay, az;
+                EM7180_readAccelerometer(&ax, &ay, &az);
+                // Scale the raw accelerometer value into G's
+                acc_x = (float)ax / ACC_SCALE; 
+                acc_y = (float)ay / ACC_SCALE;
+                acc_z = (float)az / ACC_SCALE;
+                // Calculate the gravitation contribution from quatarions
+                a1 = 2.0f * (qx * qz - qw * qy);
+                a2 = 2.0f * (qw * qx + qy * qz);
+                a3 = qw * qw - qx * qx - qy * qy + qz * qz;
+                // Remove gravitation
+                acc_x -= a1;
+                acc_y -= a2;
+                acc_z -= a3;
+                // Convert from G's into cm/s^2
+                acc_x *= 9.80665f * 100.0f;
+                acc_y *= 9.80665f * 100.0f;
+                acc_z *= 9.80665f * 100.0f;
+                //heading_data.acc_x = acc_x;
+                //heading_data.acc_y = acc_y;
+                altitude_data.acc_z = acc_z;
+            }
+            
+            if(EM7180_gotBarometer()) { // 50Hz
+                float temperature, pressure;
+                EM7180_readBarometer(&pressure, &temperature);
+                
+                float altitude = (1.0f - powf(pressure / 1013.25f, 0.190295f)) * 44330.0f;
+                
+                altitude_data.altitude = altitude;
+                // Send acc_z and barometer data to altitude task
+                xQueueSend(xQueueEM7180ToAlt, &altitude_data, 0);
+                //newBaro = true;
+            }
+            
+            /*if(EM7180_gotBarometer()) { // 50Hz
+            float temperature, pressure;
+            EM7180_readBarometer(&pressure, &temperature);
+            
+        }*/
+            HAL_GPIO_WritePin(GPIOD, LD3_Pin, GPIO_PIN_RESET);
+        }
+	}
+}
