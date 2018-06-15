@@ -234,8 +234,8 @@ int main(void)
 // PA2 - bluetooth rx
 // PA3 - bluetooth tx
 
-attitude_data_t attitude_data;
-altitude_data_t altitude_data;
+static attitude_data_t attitude_data;
+static altitude_data_t altitude_data;
 
 void QuadcopterTask(void *pvParameters)
 {

@@ -30,24 +30,27 @@ extern xQueueHandle xQueueAltToQuad;
 //average_t baro2_average = IDLE;
 
 filter_average_t avg_acc = {
-  .sample_start = 1000,
-  .sample_stop = 2000,
+  .sample_start = 0,
+  .sample_stop = 100,
   .ready = false
 };
 
 filter_average_t avg_baro1 = {
-  .sample_start = 100,
-  .sample_stop = 200,
+  .sample_start = 0,
+  .sample_stop = 100,
   .ready = false
 };
 
 filter_average_t avg_baro2 = {
-  .sample_start = 100,
-  .sample_stop = 200,
+  .sample_start = 0,
+  .sample_stop = 100,
   .ready = false
 };
 
-altitude_data_t altitude_data;
+static altitude_data_t altitude_data;
+static float acc_z_offset = 0;
+static float baro1_offset = 0;
+static float baro2_offset = 0;
 
 void AltitudeTask(void *pvParameters)
 {
@@ -61,9 +64,7 @@ void AltitudeTask(void *pvParameters)
     //float acceleration;
     //bool newBaro = false;
     
-    float acc_z_offset = 0;
-    float baro1_offset = 0;
-    float baro2_offset = 0;
+    
     
 	while(1){
         if(xQueueReceive(xQueueEM7180ToAlt, &altitude_data, portMAX_DELAY)){
@@ -109,10 +110,10 @@ void TelemetryTask2(void *pvParameters)
         //UART_Print(" gx: %.4f", gyro_x);
         //UART_Print(" gy: %.4f", gyro_y);
         //UART_Print(" gz: %.4f", gyro_z);
-        UART_Print(" y: %.4f", altitude_data.altitude);
-        UART_Print(" p: %.4f", altitude_data.acc_z);
-        //UART_Print(" a1: %.4f", a1);
-        //UART_Print(" a2: %.4f", a2);
+        UART_Print(" b: %.4f", altitude_data.altitude);
+        UART_Print(" a: %.4f", altitude_data.acc_z);
+        UART_Print(" bo: %.4f", baro1_offset);
+        UART_Print(" ao: %.4f", acc_z_offset);
         //UART_Print(" a3: %.4f", a3);
         UART_Print("\n\r");
     }

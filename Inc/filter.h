@@ -14,5 +14,6 @@ typedef struct{
     bool ready;
 } filter_average_t;
 
+void filter_average(filter_average_t *avg);
 
 #endif
