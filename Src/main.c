@@ -61,25 +61,50 @@
 #include "altitude.h"
 #include "heading.h"
 #include "ms5803.h"
+#include "types.h"
 /* USER CODE END Includes */
 
 /* Private variables ---------------------------------------------------------*/
-osThreadId defaultTaskHandle;
+I2C_HandleTypeDef hi2c1;
+I2C_HandleTypeDef hi2c3;
+
+TIM_HandleTypeDef htim1;
+TIM_HandleTypeDef htim4;
+TIM_HandleTypeDef htim9;
+
+UART_HandleTypeDef huart5;
+UART_HandleTypeDef huart2;
+UART_HandleTypeDef huart6;
+
+osThreadId EM7180TaskHandle;
+osThreadId AltitudeTaskHandle;
+osThreadId QuadcopterTaskHandle;
+osThreadId TelemetryTaskHandle;
+osThreadId TelemetryTask2Handle;
+//osMessageQId myQueueEM7180ToAltHandle;
+//osMessageQId myQueueEM7180ToQuadHandle;
+//osMessageQId myQueueAltToQuadHandle;
+//osMessageQId myQueueMS5803ToAltHandle;
+osSemaphoreId myBinarySemEM7180InterruptHandle;
 
 /* USER CODE BEGIN PV */
 /* Private variables ---------------------------------------------------------*/
+osMailQDef(myMailEM7180ToQuadHandle, 1, attitude_data_t);
+osMailQId myMailEM7180ToQuadHandle;
 
-// Queues
-xQueueHandle xQueueEM7180ToQuad;
-xQueueHandle xQueueEM7180ToAlt;
-xQueueHandle xQueueAltToQuad;
-xQueueHandle xQueueMS5803ToAlt;
+osMailQDef(myMailEM7180ToAltHandle, 1, altitude_data_t);
+osMailQId myMailEM7180ToAltHandle;
 
-// Semaphores
-xSemaphoreHandle xSemaphoreEM7180Interrupt;
+osMailQDef(myMailAltToQuadHandle, 1, altitude_hold_data_t);
+osMailQId myMailAltToQuadHandle;
 
-// Mutexes
-//SemaphoreHandle_t xMutexI2C;
+osMailQDef(myMailMS5803ToAltHandle, 1, float);
+osMailQId myMailMS5803ToAltHandle;
+
+//xQueueHandle xQueueEM7180ToQuad;
+//xQueueHandle xQueueEM7180ToAlt;
+//xQueueHandle xQueueAltToQuad;
+//xQueueHandle xQueueMS5803ToAlt;
 
 
 #ifndef M_PI
@@ -89,13 +114,13 @@ xSemaphoreHandle xSemaphoreEM7180Interrupt;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
-void StartDefaultTask(void const * argument);
+//void StartEM7180Task(void const * argument);
+//void StartAltitudeTask(void const * argument);
+void QuadcopterStartTask(void const * argument);
+void TelemetryStartTask(void const * argument);
 
 /* USER CODE BEGIN PFP */
 /* Private function prototypes -----------------------------------------------*/
-
-static void QuadcopterTask(void *pvParameters);
-static void TelemetryTask(void *pvParameters);
 
 /* USER CODE END PFP */
 
@@ -134,16 +159,12 @@ int main(void)
     MX_GPIO_Init();
     MX_I2C1_Init();
     MX_I2C3_Init();
-    MX_SPI1_Init();
     MX_TIM1_Init();
-    MX_TIM2_Init();
-    MX_TIM3_Init();
     MX_TIM4_Init();
     MX_TIM9_Init();
-    MX_TIM12_Init();
-    MX_TIM13_Init();
     MX_USART2_UART_Init();
-    MX_USART3_UART_Init();
+    MX_USART6_UART_Init();
+    MX_UART5_Init();
     /* USER CODE BEGIN 2 */
     
     // Initialize EM7180 (gyro, acc, mag, baro)
@@ -170,10 +191,13 @@ int main(void)
     //xMutexI2C = xSemaphoreCreateMutex();
     /* USER CODE END RTOS_MUTEX */
     
+    /* Create the semaphores(s) */
+    /* definition and creation of myBinarySemEM7180Interrupt */
+    osSemaphoreDef(myBinarySemEM7180Interrupt);
+    myBinarySemEM7180InterruptHandle = osSemaphoreCreate(osSemaphore(myBinarySemEM7180Interrupt), 1);
+    
     /* USER CODE BEGIN RTOS_SEMAPHORES */
     /* add semaphores, ... */
-    vSemaphoreCreateBinary(xSemaphoreEM7180Interrupt);
-    //vSemaphoreCreateBinary(xSemaphoreEM7180AltInterrupt);
     /* USER CODE END RTOS_SEMAPHORES */
     
     /* USER CODE BEGIN RTOS_TIMERS */
@@ -181,29 +205,40 @@ int main(void)
     /* USER CODE END RTOS_TIMERS */
     
     /* Create the thread(s) */
-    /* definition and creation of defaultTask */
-    //osThreadDef(defaultTask, StartDefaultTask, osPriorityNormal, 0, 128);
-    //defaultTaskHandle = osThreadCreate(osThread(defaultTask), NULL);
+    /* definition and creation of EM7180Task2 */
+    osThreadDef(EM7180Task, EM7180StartTask, osPriorityNormal, 0, 512);
+    EM7180TaskHandle = osThreadCreate(osThread(EM7180Task), NULL);
+    
+    /* definition and creation of AltitudeTask2 */
+    osThreadDef(AltitudeTask, AltitudeStartTask, osPriorityNormal, 0, 256);
+    AltitudeTaskHandle = osThreadCreate(osThread(AltitudeTask), NULL);
+    
+    /* definition and creation of QuadcopterTask2 */
+    osThreadDef(QuadcopterTask, QuadcopterStartTask, osPriorityNormal, 0, 256);
+    QuadcopterTaskHandle = osThreadCreate(osThread(QuadcopterTask), NULL);
+    
+    /* definition and creation of TelemetryTask */
+    osThreadDef(TelemetryTask, TelemetryStartTask, osPriorityBelowNormal, 0, 256);
+    //TelemetryTaskHandle = osThreadCreate(osThread(TelemetryTask), NULL);
+    
+    osThreadDef(TelemetryTask2, TelemetryStartTask2, osPriorityBelowNormal, 0, 256);
+    TelemetryTask2Handle = osThreadCreate(osThread(TelemetryTask2), NULL);
     
     /* USER CODE BEGIN RTOS_THREADS */
     /* add threads, ... */
-    //xTaskCreate(LedTask, (const char* const)"LedTask", configMINIMAL_STACK_SIZE, 0, osPriorityNormal, 0);
-    xTaskCreate(EM7180Task, (const char* const)"EM7180Task", 4*configMINIMAL_STACK_SIZE, 0, 1, 0);
-    xTaskCreate(AltitudeTask, (const char* const)"AltitudeTask", 2*configMINIMAL_STACK_SIZE, 0, 1, 0);
-    //xTaskCreate(MS5803Task, (const char* const)"MS5803Task", 2*configMINIMAL_STACK_SIZE, 0, 1, 0);
-    //xTaskCreate(TelemetryTask, (const char* const)"TelemetryTask", 2*configMINIMAL_STACK_SIZE, 0, 0, 0);
-    xTaskCreate(TelemetryTask2, (const char* const)"TelemetryTask2", 2*configMINIMAL_STACK_SIZE, 0, 0, 0);
-    xTaskCreate(QuadcopterTask, (const char* const)"QuadcopterTask", 2*configMINIMAL_STACK_SIZE, 0, 1, 0);
-    /* USER CODE END RTOS_THREADS */
+
+    /* Create the queue(s) */
+
     
     /* USER CODE BEGIN RTOS_QUEUES */
     /* add queues, ... */
-    xQueueEM7180ToQuad = xQueueCreate(1, sizeof(attitude_data_t));
-    xQueueEM7180ToAlt = xQueueCreate(1, sizeof(altitude_data_t));
-    xQueueAltToQuad = xQueueCreate(1, sizeof(altitude_hold_data_t));
-    xQueueMS5803ToAlt = xQueueCreate(1, sizeof(float));
-    /* USER CODE END RTOS_QUEUES */
+        
+    myMailEM7180ToQuadHandle = osMailCreate(osMailQ(myMailEM7180ToQuadHandle), NULL);
+    myMailEM7180ToAltHandle = osMailCreate(osMailQ(myMailEM7180ToQuadHandle), NULL);
+    myMailAltToQuadHandle = osMailCreate(osMailQ(myMailEM7180ToQuadHandle), NULL);
+    myMailMS5803ToAltHandle = osMailCreate(osMailQ(myMailEM7180ToQuadHandle), NULL);
     
+    /* USER CODE END RTOS_QUEUES */
     
     /* Start scheduler */
     osKernelStart();
@@ -226,34 +261,13 @@ int main(void)
 
 /* USER CODE BEGIN 4 */
 
-// green LD4_Pin GPIO_PIN_12 altitude
-// orange LD3_Pin GPIO_PIN_13 em7180
-// red LD5_Pin GPIO_PIN_14  ms5803
-// blue LD6_Pin GPIO_PIN_15 quadcopter
+// GPIO_PIN_12 altitude
+// GPIO_PIN_13 em7180
+// GPIO_PIN_14  ms5803
+// GPIO_PIN_15 quadcopter
 
 // PA2 - bluetooth rx
 // PA3 - bluetooth tx
-
-static attitude_data_t attitude_data;
-static altitude_data_t altitude_data;
-
-void QuadcopterTask(void *pvParameters)
-{
-    
-    
-    while(1){
-        if(xQueueReceive(xQueueEM7180ToQuad, &attitude_data, portMAX_DELAY)){
-            HAL_GPIO_WritePin(GPIOD, LD6_Pin, GPIO_PIN_SET);
-            //HAL_GPIO_TogglePin(GPIOD, LD6_Pin);
-            // Altitude
-            if(xQueueReceive(xQueueAltToQuad, &altitude_data, 0)){
-                // Do stuff
-            }
-            HAL_GPIO_WritePin(GPIOD, LD6_Pin, GPIO_PIN_RESET);           
-        }
-    }
-}
-
 
 //float qw, qx, qy, qz;
 // Acceleration in m/s^2 adjusted without gravity
@@ -261,13 +275,57 @@ void QuadcopterTask(void *pvParameters)
 // Gyro in m/s (drift free from EM7180?)
 //float gyro_x, gyro_y, gyro_z;
 // Angles in degrees
-//float yaw, pitch, roll;
 
-void TelemetryTask(void *pvParameters)
+/* USER CODE BEGIN 4 */
+
+/* USER CODE END 4 */
+
+/* StartQuadcopterTask function */
+float yaw, pitch, roll;
+
+void QuadcopterStartTask(void const * argument)
 {
-    baro_data_t baro_data;
-    
-	while(1){
+    /* USER CODE BEGIN StartQuadcopterTask */
+    attitude_data_t  *attitude_ptr;
+    osEvent EM7180Event;
+    /* Infinite loop */
+    while(1){
+        EM7180Event = osMailGet(myMailEM7180ToQuadHandle, osWaitForever);
+        HAL_GPIO_WritePin(GPIOB, GPIO_PIN_15, GPIO_PIN_SET);
+        if (EM7180Event.status == osEventMail) {
+            attitude_ptr = EM7180Event.value.p;
+            
+            yaw = attitude_ptr->quaternions.yaw;
+            pitch = attitude_ptr->quaternions.pitch;
+            roll = attitude_ptr->quaternions.roll;
+            
+            osMailFree(myMailEM7180ToQuadHandle, attitude_ptr);
+        }
+        HAL_GPIO_WritePin(GPIOB, GPIO_PIN_15, GPIO_PIN_RESET);
+        //evt = osMessageGet(myQueueEM7180ToQuadHandle, osWaitForever);  // wait for message
+        //if (evt.status == osEventMessage) {
+        //rptr = evt.value.p;
+        
+        //osPoolFree(mpool, rptr);                  // free memory allocated for message
+        /*if(xQueueReceive(xQueueEM7180ToQuad, &attitude_data, portMAX_DELAY)){
+        
+        //HAL_GPIO_TogglePin(GPIOD, LD6_Pin);
+        // Altitude
+        if(xQueueReceive(xQueueAltToQuad, &altitude_data, 0)){
+        // Do stuff
+    }
+                   
+    }*/
+        //}
+    }
+}
+
+/* TelemetryStartTask function */
+void TelemetryStartTask(void const * argument)
+{
+    /* USER CODE BEGIN TelemetryStartTask */
+    /* Infinite loop */
+    while(1){
         osDelay(200); // TODO: osDelayUntil
         //UART_Print("Total %d", xPortGetMinimumEverFreeHeapSize());
         //UART_Print(" pitch: %.4f", pitch);
@@ -276,54 +334,17 @@ void TelemetryTask(void *pvParameters)
         //UART_Print(" gx: %.4f", gyro_x);
         //UART_Print(" gy: %.4f", gyro_y);
         //UART_Print(" gz: %.4f", gyro_z);
-        UART_Print(" y: %.4f", attitude_data.quaternions.yaw);
-        UART_Print(" p: %.4f", attitude_data.quaternions.pitch);
-        UART_Print(" r: %.4f", attitude_data.quaternions.roll);
+        UART_Print(" y: %.4f", yaw);
+        UART_Print(" p: %.4f", pitch);
+        UART_Print(" r: %.4f", roll);
         //UART_Print(" a1: %.4f", a1);
         //UART_Print(" a2: %.4f", a2);
         //UART_Print(" a3: %.4f", a3);
         UART_Print("\n\r");
     }
+    /* USER CODE END TelemetryStartTask */
 }
 
-
-/* USER CODE BEGIN 4 */
-
-/* USER CODE END 4 */
-
-/* StartDefaultTask function */
-void StartDefaultTask(void const * argument)
-{
-    
-    /* USER CODE BEGIN 5 */
-    /* Infinite loop */
-    for(;;)
-    {
-        osDelay(100);
-    }
-    /* USER CODE END 5 */ 
-}
-
-/**
-* @brief  Period elapsed callback in non blocking mode
-* @note   This function is called  when TIM6 interrupt took place, inside
-* HAL_TIM_IRQHandler(). It makes a direct call to HAL_IncTick() to increment
-* a global variable "uwTick" used as application time base.
-* @param  htim : TIM handle
-* @retval None
-*/
-void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
-{
-    /* USER CODE BEGIN Callback 0 */
-    
-    /* USER CODE END Callback 0 */
-    if (htim->Instance == TIM6) {
-        HAL_IncTick();
-    }
-    /* USER CODE BEGIN Callback 1 */
-    
-    /* USER CODE END Callback 1 */
-}
 
 /**
 * @brief  This function is executed in case of error occurrence.

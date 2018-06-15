@@ -117,11 +117,12 @@ along with EM7180.  If not, see <http://www.gnu.org/licenses/>.
 // Are these static for the EM7180?
 #define ACC_SCALE   2048
 #define GYRO_SCALE  65536
+
 // Input Semaphore
-extern xSemaphoreHandle xSemaphoreEM7180Interrupt;
-// Output Queues
-extern xQueueHandle xQueueEM7180ToAlt;
-extern xQueueHandle xQueueEM7180ToQuad;
+extern osSemaphoreId myBinarySemEM7180InterruptHandle;
+// Output Mail
+extern osMailQId myMailEM7180ToQuadHandle;
+extern osMailQId myMailEM7180ToAltHandle;
 
 
 static uint8_t _eventStatus;
@@ -141,21 +142,6 @@ static void readBytes(uint8_t address, uint8_t subAddress, uint8_t count, uint8_
 static uint8_t readByte(uint8_t address, uint8_t subAddress);
 static void writeByte(uint8_t address, uint8_t subAddress, uint8_t data);
 static void readThreeAxis(uint8_t xreg, int16_t *x, int16_t *y, int16_t *z);
-
-
-I2C_HandleTypeDef i2c_temp;
-
-/*void EM7180_InterruptCallback()
-{
-portBASE_TYPE xHigherPriorityTaskWoken = pdFALSE;
-
-// Give interrupt to start off the EM7180 task
-xSemaphoreGiveFromISR(xSemaphoreEM7180Interrupt, &xHigherPriorityTaskWoken);
-
-if (xHigherPriorityTaskWoken != pdFALSE) {
-portEND_SWITCHING_ISR(xHigherPriorityTaskWoken);
-    }
-}*/
 
 
 void delay(uint32_t milliseconds)
@@ -688,115 +674,106 @@ uint8_t EM7180_getActualTempRate()
 }
 
 
-void EM7180Task(void *pvParameters)
-{
-    // Data to be sent to Quadcopter task
-    attitude_data_t attitude_data;
-    // Data to be sent to Altitude task
-    altitude_data_t altitude_data;
-    //  Data to be sent to Heading task
-    heading_data_t heading_data;
+/* StartEM7180Task function */
+void EM7180StartTask(void const * argument)
+{                    
     // Quaternions
     float qw, qx, qy, qz;
-    // Acceleration in m/s^2 adjusted without gravity
+    // Acceleration in cm/s^2 adjusted without gravity
     float acc_x, acc_y, acc_z;
-    // Gyro in m/s (drift free from EM7180?)
+    // Gyro in m/s(?) (drift free from EM7180?)
     float gyro_x, gyro_y, gyro_z;
     // Angles in degrees
     float yaw, pitch, roll;
-    // 
+    // Gravitational contribution to acceleration
     float a1, a2, a3;
-    
+        
 	while(1){
-        if(xSemaphoreTake(xSemaphoreEM7180Interrupt, 50)){
-            HAL_GPIO_WritePin(GPIOD, LD3_Pin, GPIO_PIN_SET);
-            EM7180_checkEventStatus();
+        osSemaphoreWait(myBinarySemEM7180InterruptHandle, osWaitForever);
+        HAL_GPIO_WritePin(GPIOB, GPIO_PIN_13, GPIO_PIN_SET);
+        
+        attitude_data_t *attitude_ptr;
+        attitude_ptr = osMailAlloc(myMailEM7180ToQuadHandle, osWaitForever);
+        
+        altitude_data_t *altitude_ptr;
+        altitude_ptr = osMailAlloc(myMailEM7180ToAltHandle, osWaitForever);
+        
+        EM7180_checkEventStatus();
+        
+        if (EM7180_gotError()) {  
+            UART_Print("EM7180 error: ");
+            UART_Print(EM7180_getErrorString());
+        }
+        
+        if (EM7180_gotQuaternion()) {             
+            EM7180_readQuaternion(&qw, &qx, &qy, &qz);
             
-            if (EM7180_gotError()) {  
-                UART_Print("EM7180 error: ");
-                UART_Print(EM7180_getErrorString());
-            }
+            roll  = atan2(2.0f * (qw * qx + qy * qz), qw * qw - qx * qx - qy * qy + qz * qz);
+            pitch = -asin(2.0f * (qx * qz - qw * qy));
+            yaw   = atan2(2.0f * (qx * qy + qw * qz), qw * qw + qx * qx - qy * qy - qz * qz);   
             
-            if (EM7180_gotQuaternion()) {             
-                EM7180_readQuaternion(&qw, &qx, &qy, &qz);
-                
-                roll  = atan2(2.0f * (qw * qx + qy * qz), qw * qw - qx * qx - qy * qy + qz * qz);
-                pitch = -asin(2.0f * (qx * qz - qw * qy));
-                yaw   = atan2(2.0f * (qx * qy + qw * qz), qw * qw + qx * qx - qy * qy - qz * qz);   
-                
-                pitch *= 180.0f / M_PI;
-                yaw   *= 180.0f / M_PI; 
-                //yaw   += 13.8f; // Declination at Danville, California is 13 degrees 48 minutes and 47 seconds on 2014-04-04
-                if(yaw < 0) yaw += 360.0f; // Ensure yaw stays between 0 and 360
-                roll  *= 180.0f / M_PI;
-                
-                attitude_data.quaternions.yaw = yaw;
-                attitude_data.quaternions.pitch = pitch;
-                attitude_data.quaternions.roll = roll;
-                
-                //xQueueSend(xQueueEM7180ToQuad, &attitude_data, 0);
-                //UART_Print("yaw: %.3f ", yaw);
-                //UART_Print("pitch: %.3f ", pitch);
-                //UART_Print("roll: %.3f\n\r", roll);
-            }
+            pitch *= 180.0f / M_PI;
+            yaw   *= 180.0f / M_PI; 
+            //yaw   += 13.8f; // Declination at Danville, California is 13 degrees 48 minutes and 47 seconds on 2014-04-04
+            if(yaw < 0) yaw += 360.0f; // Ensure yaw stays between 0 and 360
+            roll  *= 180.0f / M_PI;
             
-            if (EM7180_gotGyrometer()) { // 250Hz
-                int16_t gx, gy, gz;
-                EM7180_readGyrometer(&gx, &gy, &gz);
-                // Scale the raw gyro into ? TODO: m/s?
-                gyro_x = (float)gx / GYRO_SCALE; 
-                gyro_y = (float)gy / GYRO_SCALE; 
-                gyro_z = (float)gz / GYRO_SCALE; 
-                
-                attitude_data.gyro.x = gyro_x;
-                attitude_data.gyro.y = gyro_y;
-                attitude_data.gyro.z = gyro_z;
-            }
-            // Pass quaternions and gyro to quadcopter task
-            xQueueSend(xQueueEM7180ToQuad, &attitude_data, 0);
+            attitude_ptr->quaternions.yaw = yaw;
+            attitude_ptr->quaternions.pitch = pitch;
+            attitude_ptr->quaternions.roll = roll;
+        }
+        
+        if (EM7180_gotGyrometer()) { // 250Hz
+            int16_t gx, gy, gz;
+            EM7180_readGyrometer(&gx, &gy, &gz);
+            // Scale the raw gyro into ? TODO: m/s?
+            gyro_x = (float)gx / GYRO_SCALE; 
+            gyro_y = (float)gy / GYRO_SCALE; 
+            gyro_z = (float)gz / GYRO_SCALE; 
             
-            if (EM7180_gotAccelerometer()){ // 250Hz
-                int16_t ax, ay, az;
-                EM7180_readAccelerometer(&ax, &ay, &az);
-                // Scale the raw accelerometer value into G's
-                acc_x = (float)ax / ACC_SCALE; 
-                acc_y = (float)ay / ACC_SCALE;
-                acc_z = (float)az / ACC_SCALE;
-                // Calculate the gravitation contribution from quatarions
-                a1 = 2.0f * (qx * qz - qw * qy);
-                a2 = 2.0f * (qw * qx + qy * qz);
-                a3 = qw * qw - qx * qx - qy * qy + qz * qz;
-                // Remove gravitation
-                acc_x -= a1;
-                acc_y -= a2;
-                acc_z -= a3;
-                // Convert from G's into cm/s^2
-                acc_x *= 9.80665f * 100.0f;
-                acc_y *= 9.80665f * 100.0f;
-                acc_z *= 9.80665f * 100.0f;
-                //heading_data.acc_x = acc_x;
-                //heading_data.acc_y = acc_y;
-                altitude_data.acc_z = acc_z;
-            }
-            
-            if(EM7180_gotBarometer()) { // 50Hz
-                float temperature, pressure;
-                EM7180_readBarometer(&pressure, &temperature);
-                
-                float altitude = (1.0f - powf(pressure / 1013.25f, 0.190295f)) * 44330.0f;
-                
-                altitude_data.altitude = altitude;
-                // Send acc_z and barometer data to altitude task
-                xQueueSend(xQueueEM7180ToAlt, &altitude_data, 0);
-                //newBaro = true;
-            }
-            
-            /*if(EM7180_gotBarometer()) { // 50Hz
+            attitude_ptr->gyro.x = gyro_x;
+            attitude_ptr->gyro.y = gyro_y;
+            attitude_ptr->gyro.z = gyro_z;
+        }
+        
+        if (EM7180_gotAccelerometer()){ // 250Hz
+            int16_t ax, ay, az;
+            EM7180_readAccelerometer(&ax, &ay, &az);
+            // Scale the raw accelerometer value into G's
+            acc_x = (float)ax / ACC_SCALE; 
+            acc_y = (float)ay / ACC_SCALE;
+            acc_z = (float)az / ACC_SCALE;
+            // Calculate the gravitation contribution from quatarions
+            a1 = 2.0f * (qx * qz - qw * qy);
+            a2 = 2.0f * (qw * qx + qy * qz);
+            a3 = qw * qw - qx * qx - qy * qy + qz * qz;
+            // Remove gravitation
+            acc_x -= a1;
+            acc_y -= a2;
+            acc_z -= a3;
+            // Convert from G's into cm/s^2
+            acc_x *= 9.80665f * 100.0f;
+            acc_y *= 9.80665f * 100.0f;
+            acc_z *= 9.80665f * 100.0f;
+            //heading_data.acc_x = acc_x;
+            //heading_data.acc_y = acc_y;
+            altitude_ptr->acc_z = acc_z;
+        }
+        
+        if(EM7180_gotBarometer()) { // 50Hz
             float temperature, pressure;
             EM7180_readBarometer(&pressure, &temperature);
             
-        }*/
-            HAL_GPIO_WritePin(GPIOD, LD3_Pin, GPIO_PIN_RESET);
+            float altitude = (1.0f - powf(pressure / 1013.25f, 0.190295f)) * 44330.0f;
+            
+            altitude_ptr->altitude = altitude;
         }
+
+        // Send attitude data by mail to quadcopter task
+        osMailPut(myMailEM7180ToQuadHandle, attitude_ptr); 
+        // Send altitude data by mail to altitude task
+        osMailPut(myMailEM7180ToAltHandle, altitude_ptr); 
+        
+        HAL_GPIO_WritePin(GPIOB, GPIO_PIN_13, GPIO_PIN_RESET);
 	}
 }

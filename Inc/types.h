@@ -39,7 +39,6 @@ typedef struct{
     float altitude;
     float rate;
     uint32_t dt;
-    UBaseType_t stack_size;
 } altitude_hold_data_t;
 
 #endif

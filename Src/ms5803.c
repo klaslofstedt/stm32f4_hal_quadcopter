@@ -218,14 +218,14 @@ void MS5803Task(void *pvParameters)
 {    
 	while(1){
         osDelay(20); // TODO: osDelayUntil
-        HAL_GPIO_WritePin(GPIOD, LD5_Pin, GPIO_PIN_SET);
+        HAL_GPIO_WritePin(GPIOB, GPIO_PIN_14, GPIO_PIN_SET);
         float temperature, pressure;
         // Read barometer data
         MS5803_Read(&pressure, &temperature);
         float altitude = (float)(44307.7 * (1.0 - (pow(pressure / 1013.25, 0.190284))));
         // Pass struct with barometric data to the Altitude task
         xQueueSend(xQueueMS5803ToAlt, &altitude, 100);
-        HAL_GPIO_WritePin(GPIOD, LD5_Pin, GPIO_PIN_RESET);
+        HAL_GPIO_WritePin(GPIOB, GPIO_PIN_14, GPIO_PIN_RESET);
     }
 }
 

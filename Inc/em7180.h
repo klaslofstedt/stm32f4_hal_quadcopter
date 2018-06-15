@@ -10,9 +10,7 @@
 
 
 
-void EM7180Task(void *pvParameters);
-
-void EM7180_InterruptCallback();
+void EM7180StartTask(void const * argument);
 
 bool EM7180_Init();
 bool EM7180_EEPROM(void);

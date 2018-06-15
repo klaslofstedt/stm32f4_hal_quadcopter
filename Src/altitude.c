@@ -18,16 +18,12 @@
 #define M_PI 3.14159265358979
 #endif
 
-// Input Queues
-extern xQueueHandle xQueueEM7180ToAlt; //queue_em7180_to_alt
-extern xQueueHandle xQueueMS5803ToAlt;
-// Output Queue
-extern xQueueHandle xQueueAltToQuad;
+// Input mail
+extern osMailQId myMailEM7180ToAltHandle;
+extern osMailQId myMailMS5803ToAltHandle;
+// Output mail
+extern osMailQId myMailAltToQuadHandle;
 
-//typedef enum average_t { IDLE, CALCULATING, READY };
-//average_t acc_average = IDLE;
-//average_t baro1_average = IDLE;
-//average_t baro2_average = IDLE;
 
 filter_average_t avg_acc = {
   .sample_start = 0,
@@ -47,59 +43,49 @@ filter_average_t avg_baro2 = {
   .ready = false
 };
 
-static altitude_data_t altitude_data;
 static float acc_z_offset = 0;
 static float baro1_offset = 0;
 static float baro2_offset = 0;
 
-void AltitudeTask(void *pvParameters)
-{
-    
-    //altitude_hold_data_t altitude_hold_data;
-    
-    //baro_data_t baro1;
-    //baro_data_t baro2; // baro1 & baro2?
-    
-    //float baro1, baro2;
-    //float acceleration;
-    //bool newBaro = false;
-    
-    
+float baro1, baro2;
+float acc;
+
+void AltitudeStartTask(void const * argument)
+{    
+
+
+    altitude_data_t  *altitude_ptr;
+    osEvent EM7180Event;
     
 	while(1){
-        if(xQueueReceive(xQueueEM7180ToAlt, &altitude_data, portMAX_DELAY)){
-            HAL_GPIO_WritePin(GPIOD, LD4_Pin, GPIO_PIN_SET);
+        EM7180Event = osMailGet(myMailEM7180ToAltHandle, osWaitForever);
+        HAL_GPIO_WritePin(GPIOB, GPIO_PIN_12, GPIO_PIN_SET);
+        if (EM7180Event.status == osEventMail) {
+            altitude_ptr = EM7180Event.value.p;
+            
+            baro1 = altitude_ptr->altitude;
+            acc = altitude_ptr->acc_z;
+            
+            osMailFree(myMailEM7180ToAltHandle, altitude_ptr);
             
             // Calculate accelerometer offset on the z-axis
             if(!avg_acc.ready){
-                avg_acc.sample = altitude_data.acc_z;
+                avg_acc.sample = acc;
                 filter_average(&avg_acc);
                 acc_z_offset = avg_acc.average;
             }
+            // Calculate barometer1 offset
             if(!avg_baro1.ready){
-                avg_baro1.sample = altitude_data.altitude;
+                avg_baro1.sample = baro1;
                 filter_average(&avg_baro1);
                 baro1_offset = avg_baro1.average;
             }
-            
-            
-            /*if(xQueueReceive(xQueueMS5803ToAlt, &barometer2_data, 0)){ // 50Hz
-            
-        }*/
-            
-            //altitude_hold_data.altitude = (baro1 + baro2) / 2; // Mock
-            // Shitload of computations
-            
-            /*if(newBaro){
-                newBaro = false;
-                xQueueSend(xQueueAltToQuad, &altitude_data, 4 / portTICK_PERIOD_MS); // Wait for 250Hz
-            }*/
-            HAL_GPIO_WritePin(GPIOD, LD4_Pin, GPIO_PIN_RESET);
+            HAL_GPIO_WritePin(GPIOB, GPIO_PIN_12, GPIO_PIN_RESET);
         }
     }
 }
 
-void TelemetryTask2(void *pvParameters)
+void TelemetryStartTask2(void const * argument)
 {
 	while(1){
         osDelay(200); // TODO: osDelayUntil
@@ -110,8 +96,8 @@ void TelemetryTask2(void *pvParameters)
         //UART_Print(" gx: %.4f", gyro_x);
         //UART_Print(" gy: %.4f", gyro_y);
         //UART_Print(" gz: %.4f", gyro_z);
-        UART_Print(" b: %.4f", altitude_data.altitude);
-        UART_Print(" a: %.4f", altitude_data.acc_z);
+        UART_Print(" b: %.4f", baro1);
+        UART_Print(" a: %.4f", acc);
         UART_Print(" bo: %.4f", baro1_offset);
         UART_Print(" ao: %.4f", acc_z_offset);
         //UART_Print(" a3: %.4f", a3);

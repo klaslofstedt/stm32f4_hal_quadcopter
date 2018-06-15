@@ -3,7 +3,7 @@
 
 
 
-void AltitudeTask(void *pvParameters);
-void TelemetryTask2(void *pvParameters);
+void AltitudeStartTask(void const * argument);
+void TelemetryStartTask2(void const * argument);
 
 #endif
