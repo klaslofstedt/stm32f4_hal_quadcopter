@@ -14,6 +14,16 @@ typedef struct{
     bool ready;
 } filter_average_t;
 
-void filter_average(filter_average_t *avg);
+typedef struct{
+    float input;
+    float output_last;
+    float output;
+    float cf; //cut-off frequency (higher value lower filtering)
+    float dt;
+} filter_lowpass_t;
+
+
+void filter_average(filter_average_t *temp);
+void filter_lowpass(filter_lowpass_t *temp);
 
 #endif

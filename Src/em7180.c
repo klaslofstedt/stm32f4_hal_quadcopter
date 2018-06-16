@@ -687,15 +687,19 @@ void EM7180StartTask(void const * argument)
     float yaw, pitch, roll;
     // Gravitational contribution to acceleration
     float a1, a2, a3;
-        
+    //
+    bool newAltData = false;
+    uint32_t wakeTime = osKernelSysTick();
+    uint32_t lastTime = 0;
+   
 	while(1){
         osSemaphoreWait(myBinarySemEM7180InterruptHandle, osWaitForever);
-        HAL_GPIO_WritePin(GPIOB, GPIO_PIN_13, GPIO_PIN_SET);
         
-        attitude_data_t *attitude_ptr;
+        
+        em7180_attitude_data_t *attitude_ptr;
         attitude_ptr = osMailAlloc(myMailEM7180ToQuadHandle, osWaitForever);
         
-        altitude_data_t *altitude_ptr;
+        em7180_altitude_data_t *altitude_ptr;
         altitude_ptr = osMailAlloc(myMailEM7180ToAltHandle, osWaitForever);
         
         EM7180_checkEventStatus();
@@ -718,9 +722,9 @@ void EM7180StartTask(void const * argument)
             if(yaw < 0) yaw += 360.0f; // Ensure yaw stays between 0 and 360
             roll  *= 180.0f / M_PI;
             
-            attitude_ptr->quaternions.yaw = yaw;
-            attitude_ptr->quaternions.pitch = pitch;
-            attitude_ptr->quaternions.roll = roll;
+            attitude_ptr->angle.yaw = yaw;
+            attitude_ptr->angle.pitch = pitch;
+            attitude_ptr->angle.roll = roll;
         }
         
         if (EM7180_gotGyrometer()) { // 250Hz
@@ -766,13 +770,22 @@ void EM7180StartTask(void const * argument)
             
             float altitude = (1.0f - powf(pressure / 1013.25f, 0.190295f)) * 44330.0f;
             
+            
             altitude_ptr->altitude = altitude;
+            //newAltData = true;
         }
-
-        // Send attitude data by mail to quadcopter task
-        osMailPut(myMailEM7180ToQuadHandle, attitude_ptr); 
-        // Send altitude data by mail to altitude task
-        osMailPut(myMailEM7180ToAltHandle, altitude_ptr); 
+        
+        // Calculate dt
+        wakeTime = osKernelSysTick();
+        uint32_t dt = wakeTime - lastTime;
+        lastTime = wakeTime;
+        // Convert from milliseconds to seconds
+        attitude_ptr->dt = (float)dt*0.001;
+        altitude_ptr->dt = (float)dt*0.001;
+        // Send attitude data by mail to quadcopter task 250 Hz
+        osMailPut(myMailEM7180ToQuadHandle, attitude_ptr);
+        // Send altitude data by mail to altitude task 50 Hz
+        osMailPut(myMailEM7180ToAltHandle, altitude_ptr);
         
         HAL_GPIO_WritePin(GPIOB, GPIO_PIN_13, GPIO_PIN_RESET);
 	}

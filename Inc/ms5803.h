@@ -41,9 +41,9 @@ typedef enum
 
 //void barometer_task(void *pvParameters);
 bool MS5803_Init();
-void MS5803_Read(float *pressure, float *temperature);
+void MS5803_Read(float *pressure, float *temperature, ms5803_pressure_t pressure_sens, ms5803_temperature_t temp_sens);
 //void MS5803_Read(barometer_data_t* barometer_data);
-void MS5803Task(void *pvParameters);
+void MS5803StartTask(void const * argument);
 const char *MS5803_getErrorString(void);
 
 #endif

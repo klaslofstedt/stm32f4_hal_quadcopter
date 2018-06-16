@@ -79,27 +79,27 @@ UART_HandleTypeDef huart6;
 osThreadId EM7180TaskHandle;
 osThreadId AltitudeTaskHandle;
 osThreadId QuadcopterTaskHandle;
+//osThreadId MS5803TaskHandle;
 osThreadId TelemetryTaskHandle;
 osThreadId TelemetryTask2Handle;
-//osMessageQId myQueueEM7180ToAltHandle;
-//osMessageQId myQueueEM7180ToQuadHandle;
-//osMessageQId myQueueAltToQuadHandle;
-//osMessageQId myQueueMS5803ToAltHandle;
+
 osSemaphoreId myBinarySemEM7180InterruptHandle;
 
 /* USER CODE BEGIN PV */
 /* Private variables ---------------------------------------------------------*/
-osMailQDef(myMailEM7180ToQuadHandle, 1, attitude_data_t);
+osMailQDef(myMailEM7180ToQuadHandle, 1, em7180_attitude_data_t);
 osMailQId myMailEM7180ToQuadHandle;
 
-osMailQDef(myMailEM7180ToAltHandle, 1, altitude_data_t);
+osMailQDef(myMailEM7180ToAltHandle, 1, em7180_altitude_data_t);
 osMailQId myMailEM7180ToAltHandle;
 
-osMailQDef(myMailAltToQuadHandle, 1, altitude_hold_data_t);
+//osMailQDef(myMailMS5803ToAltHandle, 1, ms5803_altitude_data_t);
+//osMailQId myMailMS5803ToAltHandle;
+
+osMailQDef(myMailAltToQuadHandle, 1, altitude_data_t);
 osMailQId myMailAltToQuadHandle;
 
-osMailQDef(myMailMS5803ToAltHandle, 1, float);
-osMailQId myMailMS5803ToAltHandle;
+
 
 //xQueueHandle xQueueEM7180ToQuad;
 //xQueueHandle xQueueEM7180ToAlt;
@@ -174,11 +174,11 @@ int main(void)
         UART_Print(EM7180_getErrorString());
     }
     // Initialize MS5803 (baro)
-    if(MS5803_Init()){ // TODO: Init with i2c
+    /*if(MS5803_Init()){ // TODO: Init with i2c
         UART_Print("MS5803 Initialized\n\r");
     }else{ // Print error message
         UART_Print(MS5803_getErrorString());
-    }
+    }*/
     // Initialize laser
     
     // Initialize GPS
@@ -205,15 +205,15 @@ int main(void)
     /* USER CODE END RTOS_TIMERS */
     
     /* Create the thread(s) */
-    /* definition and creation of EM7180Task2 */
+    /* definition and creation of EM7180Task */
     osThreadDef(EM7180Task, EM7180StartTask, osPriorityNormal, 0, 512);
     EM7180TaskHandle = osThreadCreate(osThread(EM7180Task), NULL);
     
-    /* definition and creation of AltitudeTask2 */
-    osThreadDef(AltitudeTask, AltitudeStartTask, osPriorityNormal, 0, 256);
+    /* definition and creation of AltitudeTask */
+    osThreadDef(AltitudeTask, AltitudeStartTask, osPriorityNormal, 0, 512);
     AltitudeTaskHandle = osThreadCreate(osThread(AltitudeTask), NULL);
     
-    /* definition and creation of QuadcopterTask2 */
+    /* definition and creation of QuadcopterTask */
     osThreadDef(QuadcopterTask, QuadcopterStartTask, osPriorityNormal, 0, 256);
     QuadcopterTaskHandle = osThreadCreate(osThread(QuadcopterTask), NULL);
     
@@ -221,8 +221,13 @@ int main(void)
     osThreadDef(TelemetryTask, TelemetryStartTask, osPriorityBelowNormal, 0, 256);
     //TelemetryTaskHandle = osThreadCreate(osThread(TelemetryTask), NULL);
     
+    /* definition and creation of TelemetryTask2 */
     osThreadDef(TelemetryTask2, TelemetryStartTask2, osPriorityBelowNormal, 0, 256);
     TelemetryTask2Handle = osThreadCreate(osThread(TelemetryTask2), NULL);
+    
+    /* definition and creation of MS5803Task */
+    //osThreadDef(MS5803Task, MS5803StartTask, osPriorityNormal, 0, 512);
+    //MS5803TaskHandle = osThreadCreate(osThread(MS5803Task), NULL);
     
     /* USER CODE BEGIN RTOS_THREADS */
     /* add threads, ... */
@@ -234,9 +239,10 @@ int main(void)
     /* add queues, ... */
         
     myMailEM7180ToQuadHandle = osMailCreate(osMailQ(myMailEM7180ToQuadHandle), NULL);
-    myMailEM7180ToAltHandle = osMailCreate(osMailQ(myMailEM7180ToQuadHandle), NULL);
-    myMailAltToQuadHandle = osMailCreate(osMailQ(myMailEM7180ToQuadHandle), NULL);
-    myMailMS5803ToAltHandle = osMailCreate(osMailQ(myMailEM7180ToQuadHandle), NULL);
+    myMailEM7180ToAltHandle = osMailCreate(osMailQ(myMailEM7180ToAltHandle), NULL);
+    myMailAltToQuadHandle = osMailCreate(osMailQ(myMailAltToQuadHandle), NULL);
+    //myMailMS5803ToAltHandle = osMailCreate(osMailQ(myMailMS5803ToAltHandle), NULL);
+    //myMailMS5803ToAltHandle = osMailCreate(osMailQ(myMailEM7180ToQuadHandle), NULL);
     
     /* USER CODE END RTOS_QUEUES */
     
@@ -286,8 +292,11 @@ float yaw, pitch, roll;
 void QuadcopterStartTask(void const * argument)
 {
     /* USER CODE BEGIN StartQuadcopterTask */
-    attitude_data_t  *attitude_ptr;
+    em7180_attitude_data_t *attitude_ptr;
     osEvent EM7180Event;
+    
+    //altitude_data_t *altitude_ptr;
+    //osEvent AltitudeEvent;
     /* Infinite loop */
     while(1){
         EM7180Event = osMailGet(myMailEM7180ToQuadHandle, osWaitForever);
@@ -295,9 +304,9 @@ void QuadcopterStartTask(void const * argument)
         if (EM7180Event.status == osEventMail) {
             attitude_ptr = EM7180Event.value.p;
             
-            yaw = attitude_ptr->quaternions.yaw;
-            pitch = attitude_ptr->quaternions.pitch;
-            roll = attitude_ptr->quaternions.roll;
+            yaw = attitude_ptr->angle.yaw;
+            pitch = attitude_ptr->angle.pitch;
+            roll = attitude_ptr->angle.roll;
             
             osMailFree(myMailEM7180ToQuadHandle, attitude_ptr);
         }
