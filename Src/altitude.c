@@ -14,6 +14,10 @@
 #include "types.h"
 #include "filter.h"
 
+#include "vl53l0x.h"
+#include "vl53l0x_api.h"
+#include "vl53l0x_platform.h"
+
 #ifndef M_PI
 #define M_PI 3.14159265358979
 #endif
@@ -64,17 +68,42 @@ altitude_data_t altitude_data = {
 };
 
 // TODO: Most (all?) of these can be local when i don't need to print them anymore
-static float acc_offset = 0;
-static float baro_offset = 0;
 
-float baro_raw;
-float acc_raw;
-float dt;
 uint8_t readyy = 0;
+
+float acc_raw;
+float baro_raw;
+float dt;
+float dt_baro;
+float dt_tot = 0;
+
+// Sensor offset
+float acc_offset = 0;
+float baro_offset = 0;
+
+// Input data without offset
+float baro_altitude = 0; 
+float acc_acceleration = 0;
+// LP filtered input signals
+float acc_acceleration_lp;
+float baro_altitude_lp;
+// Derived velocity
+float baro_velocity;
+float baro_velocity_lp;
+// Before complementary
+float temp_altitude = 0;
+float temp_velocity = 0;
+// Finished out data
+float altitude = 0;
+float velocity = 0;
+
+// Dummy out data
+float acc_altitude = 0;
+float acc_vel = 0;
 
 void AltitudeStartTask(void const * argument)
 {    
-    
+    //VL53L0X_init();
     // Mail from EM7180 task
     em7180_altitude_data_t *em7180_ptr; //em7180_ptr
     osEvent EM7180Event;
@@ -91,6 +120,7 @@ void AltitudeStartTask(void const * argument)
             baro_raw = em7180_ptr->altitude;
             acc_raw = em7180_ptr->acc_z;
             dt = em7180_ptr->dt;
+            dt_baro = em7180_ptr->dt_baro;
             
             osMailFree(myMailEM7180ToAltHandle, em7180_ptr);
             
@@ -100,54 +130,70 @@ void AltitudeStartTask(void const * argument)
                 filter_average(&avg_acc);
                 acc_offset = avg_acc.average;
             }
-            float acc_acceleration = acc_raw - acc_offset;
+            acc_acceleration = acc_raw - acc_offset;
             // Calculate barometer1 offset
             if(!avg_baro.ready){
                 avg_baro.sample = baro_raw;
                 filter_average(&avg_baro);
                 baro_offset = avg_baro.average;
             }
-            float baro_altitude = baro_raw - baro_offset;
+            baro_altitude = baro_raw - baro_offset;
             
             if(avg_acc.ready && avg_baro.ready){
-                readyy = 1;
                 
-                // Barometric altitude without offset in cm
-                
-                // Low pass filter barometric altitude 
+                if(readyy == 0){
+                    //UART_Print("=========================");
+                    UART_Print(" bo: %.4f", baro_offset);
+                    UART_Print(" ao: %.4f\n\r", acc_offset);
+                    //UART_Print(" dt_baro: %.8f", dt_baro);
+                    //UART_Print(" dt: %.8f\n\r", dt);
+                    readyy = 1;
+                }
+                // Low pass filter barometric altitude
                 lowpass_baro_alt.input = 100 * baro_altitude;
-                lowpass_baro_alt.dt = dt;
+                lowpass_baro_alt.dt = dt_baro;
                 filter_lowpass(&lowpass_baro_alt);
-                float baro_altitude_lp = lowpass_baro_alt.output;
+                baro_altitude_lp = lowpass_baro_alt.output;
                 
                 // Derive altitude and get velocity in cm/s
                 static float baro_altitude_last;
-                float baro_velocity = (baro_altitude_lp - baro_altitude_last) / dt;
+                baro_velocity = (baro_altitude_lp - baro_altitude_last) / dt_baro;
                 baro_altitude_last = baro_altitude_lp;
                 
                 // Low pass filter barometric velocity signal
                 lowpass_baro_vel.input = baro_velocity;
-                lowpass_baro_vel.dt = dt;
+                lowpass_baro_vel.dt = dt_baro;
                 filter_lowpass(&lowpass_baro_vel);
-                float baro_velocity_lp = lowpass_baro_vel.output;
+                baro_velocity_lp = lowpass_baro_vel.output;
                 
                 // Low pass filter accelerometer acceleration
-                lowpass_acc_acc.input = acc_acceleration; // No scaling?
+                lowpass_acc_acc.input = acc_acceleration;
                 lowpass_acc_acc.dt = dt;
                 filter_lowpass(&lowpass_acc_acc);
-                float acc_acceleration_lp = lowpass_acc_acc.output;
+                acc_acceleration_lp = lowpass_acc_acc.output;
                 
-                // Velocity = initial velocity +  (acceleration * time) 
-                float temp_velocity = altitude_data.velocity + (acc_acceleration_lp * dt);
+                //--------------------
+                static float acc_vel_last;
+                acc_vel = acc_vel_last + acc_acceleration_lp * dt;
+                acc_vel_last = acc_vel;
+                
+                static float acc_alt_last;
+                acc_altitude = acc_alt_last + acc_vel * dt + 0.5f * acc_acceleration_lp * dt * dt;
+                acc_alt_last = acc_altitude;
+                //--------------------
+                
+                // Velocity = initial velocity +  (acceleration * time)
+                temp_velocity = velocity + (acc_acceleration_lp * dt);
+                
                 // Position = initial position + (initial velocity * time) + (0.5 * acceleration * (time^2))
-                float temp_altitude = altitude_data.altitude + (temp_velocity * dt) + (0.5f * acc_acceleration_lp * dt * dt);
+                temp_altitude = altitude + (temp_velocity * dt) + (0.5 * acc_acceleration_lp * dt * dt);
                 
                 // Calculate velocity using complimentary filter
-                static float vel_coeff = 0.999f;
-                float velocity = vel_coeff * temp_velocity + (1 - vel_coeff) * baro_velocity_lp; 
+                static float vel_coeff = 0.999;
+                velocity = vel_coeff * temp_velocity + (1 - vel_coeff) * baro_velocity_lp; // <---------------
                 // Calculate altitude with complimentary filter
-                static float alt_coeff = 0.995f;
-                float altitude = alt_coeff * temp_altitude + (1 - alt_coeff) * baro_altitude_lp;
+                static float alt_coeff = 0.995;
+                altitude = alt_coeff * temp_altitude + (1 - alt_coeff) * baro_altitude_lp;
                 
                 altitude_data.velocity = velocity;
                 altitude_data.altitude = altitude;
@@ -167,26 +213,36 @@ void AltitudeStartTask(void const * argument)
     }
 }
 
+
+static uint32_t counter = 0;
 void TelemetryStartTask2(void const * argument)
 {
+    osDelay(8000);
 	while(1){
-        osDelay(200); // TODO: osDelayUntil
-        //UART_Print("Total %d", xPortGetMinimumEverFreeHeapSize());
-        //UART_Print(" pitch: %.4f", pitch);
-        //UART_Print(" roll: %.4f", roll);
-        //UART_Print(" yaw: %.4f", yaw);
-        //UART_Print(" gx: %.4f", gyro_x);
-        //UART_Print(" gy: %.4f", gyro_y);
-        //UART_Print(" gz: %.4f", gyro_z);
-        //UART_Print(" b: %.4f", baro_raw);
-        //UART_Print(" b2: %.4f", baro2);
-        UART_Print(" a: %.4f", acc_raw);
-        //UART_Print(" bo: %.4f", baro_offset);
-        //UART_Print(" ao: %.4f", acc_z_offset);
-        UART_Print(" dt: %.4f", dt);
-        UART_Print(" rdy: %d", readyy);
-        UART_Print(" alt: %.4f", altitude_data.altitude);
-        UART_Print(" vel: %.4f", altitude_data.velocity);
-        UART_Print("\n\r");
+        osDelay(100); // TODO: osDelayUntil
+        if(counter < 1000){
+            dt_tot += dt;
+            counter++;
+            //UART_Print("Total %d", xPortGetMinimumEverFreeHeapSize());
+            //UART_Print(" pitch: %.4f", pitch);
+            //UART_Print(" roll: %.4f", roll);
+            //UART_Print(" yaw: %.4f", yaw);
+            //UART_Print(" gx: %.4f", gyro_x);
+            //UART_Print(" gy: %.4f", gyro_y);
+            //UART_Print(" gz: %.4f", gyro_z);
+            //UART_Print(" b: %.4f", baro_raw);
+            //UART_Print(" b2: %.4f", baro2);
+            UART_Print(" %.4f", dt_tot);
+            UART_Print(" %.4f", acc_altitude);
+            UART_Print(" %.4f", 100 * baro_altitude);
+            UART_Print(" %.4f", altitude);
+            
+            //UART_Print(" bo: %.4f", baro_offset);
+            //UART_Print(" ao: %.4f", acc_z_offset);
+            //UART_Print(" dt: %.4f", dt);
+            //UART_Print(" alt: %.4f", altitude_data.altitude);
+            //UART_Print(" vel: %.4f", altitude_data.velocity);
+            UART_Print("\n\r");
+        }
     }
 }

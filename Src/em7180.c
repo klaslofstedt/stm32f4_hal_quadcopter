@@ -691,6 +691,9 @@ void EM7180StartTask(void const * argument)
     bool newAltData = false;
     uint32_t wakeTime = osKernelSysTick();
     uint32_t lastTime = 0;
+    
+    uint32_t wakeTimeBaro = osKernelSysTick();
+    uint32_t lastTimeBaro = 0;
    
 	while(1){
         osSemaphoreWait(myBinarySemEM7180InterruptHandle, osWaitForever);
@@ -770,7 +773,11 @@ void EM7180StartTask(void const * argument)
             
             float altitude = (1.0f - powf(pressure / 1013.25f, 0.190295f)) * 44330.0f;
             
+            wakeTimeBaro = osKernelSysTick();
+            uint32_t dt_baro = wakeTimeBaro - lastTimeBaro;
+            lastTimeBaro = wakeTimeBaro;
             
+            altitude_ptr->dt_baro = (float)dt_baro*0.001;
             altitude_ptr->altitude = altitude;
             //newAltData = true;
         }
@@ -782,6 +789,7 @@ void EM7180StartTask(void const * argument)
         // Convert from milliseconds to seconds
         attitude_ptr->dt = (float)dt*0.001;
         altitude_ptr->dt = (float)dt*0.001;
+        
         // Send attitude data by mail to quadcopter task 250 Hz
         osMailPut(myMailEM7180ToQuadHandle, attitude_ptr);
         // Send altitude data by mail to altitude task 50 Hz

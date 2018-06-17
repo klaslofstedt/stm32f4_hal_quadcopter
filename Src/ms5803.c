@@ -47,10 +47,8 @@ static uint32_t barometer_read_pressure(ms5803_pressure_t sens)
     uint8_t data_send[1];
     
     data_send[0] = (uint8_t)sens;
-    //HAL_I2C_Mem_Write(&hi2c1, (uint16_t)MS5803_ADDRESS_HIGH << 1, (uint16_t)MS5803_D1_4096, 1, /* &?*/data, 1, 1000);
     HAL_I2C_Master_Transmit(&hi2c1, (uint16_t)MS5803_ADDRESS_HIGH << 1, data_send, 1, 1000);
-    //Sensors_I2C1_Write(MS5803_ADDRESS_HIGH, MS5803_D1_4096);
-    //I2C_TransmitByte(MS5803_ADDRESS_HIGH, MS5803_D1_4096); // send 2 bytes
+
     switch(sens)
 	{ 
 		case MS5803_D1_256 : osDelay(1); break; 
@@ -74,8 +72,7 @@ static uint32_t barometer_read_temperature(ms5803_temperature_t sens)
     uint8_t data_send[1];
     data_send[0] = (uint8_t)sens;
     HAL_I2C_Master_Transmit(&hi2c1, (uint16_t)MS5803_ADDRESS_HIGH << 1, data_send, 1, 1000);
-    //Sensors_I2C1_Write(MS5803_ADDRESS_HIGH, MS5803_D2_4096);
-    //I2C_TransmitByte(MS5803_ADDRESS_HIGH, MS5803_D2_4096); // send 2 bytes
+
     switch(sens)
 	{ 
 		case MS5803_D2_256 : osDelay(1); break; 
@@ -85,25 +82,19 @@ static uint32_t barometer_read_temperature(ms5803_temperature_t sens)
 		case MS5803_D2_4096: osDelay(10); break; 
 	}
     HAL_I2C_Mem_Read(&hi2c1, (uint16_t)MS5803_ADDRESS_HIGH << 1, MS5803_CMD_READ, 1, in_buffer, 3, 1000);
-    //Sensors_I2C1_ReadRegister(MS5803_ADDRESS_HIGH, MS5803_CMD_READ, 3, in_buffer);
-    
-    //I2C_TransmitByte(MS5803_ADDRESS_HIGH, MS5803_D2_4096); // send 2 bytes
-    //osDelay(10);
-    //I2C_TransmitByte(MS5803_ADDRESS_HIGH, MS5803_CMD_READ); // send 2 bytes
-    //I2C_Receive(MS5803_ADDRESS_HIGH, in_buffer, 3);
+
     temperature_raw = ((uint32_t)in_buffer[2]) | ((uint32_t)in_buffer[1] << 8) | ((uint32_t)in_buffer[0] << 16);
+    
     return temperature_raw;
 }
 
 static void barometer_reset(ms5803_cmd_t reset)
 {
-    //printf2("1!");
     uint8_t data_send[1];
     data_send[0] = reset;
     HAL_I2C_Master_Transmit(&hi2c1, (uint16_t)MS5803_ADDRESS_HIGH << 1, data_send, 1, 1000);
-    //Sensors_I2C1_Write(MS5803_ADDRESS_HIGH, reset);
-    HAL_Delay(1000);
-    //printf2("2!");
+    osDelay(1000); // TODO: HAL_Delay?
+
 }
 
 void MS5803_Read(float *pressure, float *temperature, ms5803_pressure_t pressure_sens, ms5803_temperature_t temp_sens)

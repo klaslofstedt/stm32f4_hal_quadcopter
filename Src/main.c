@@ -61,6 +61,11 @@
 #include "altitude.h"
 #include "heading.h"
 #include "ms5803.h"
+
+#include "vl53l0x.h"
+#include "vl53l0x_api.h"
+#include "vl53l0x_platform.h"
+
 #include "types.h"
 /* USER CODE END Includes */
 
@@ -167,18 +172,27 @@ int main(void)
     MX_UART5_Init();
     /* USER CODE BEGIN 2 */
     
+    
     // Initialize EM7180 (gyro, acc, mag, baro)
     if(EM7180_Init()){ // TODO: Init with i2c struct, interrupt and Hz
         UART_Print("EM7180 Initialized\n\r");
     }else{ // Print error message
         UART_Print(EM7180_getErrorString());
     }
+    // Initialize VL53L0X (laser)
+    if(VL53L0X_init()){ // TODO: Init with i2c struct, interrupt and Hz
+        UART_Print("VL53L0X Initialized\n\r");
+    }else{ // Print error message
+        UART_Print("VL53L0X Error (but will likely work anyway)\n\r");
+        //UART_Print(EM7180_getErrorString());
+    }
+    
     // Initialize MS5803 (baro)
     /*if(MS5803_Init()){ // TODO: Init with i2c
-        UART_Print("MS5803 Initialized\n\r");
-    }else{ // Print error message
-        UART_Print(MS5803_getErrorString());
-    }*/
+    UART_Print("MS5803 Initialized\n\r");
+}else{ // Print error message
+    UART_Print(MS5803_getErrorString());
+}*/
     // Initialize laser
     
     // Initialize GPS
@@ -188,7 +202,6 @@ int main(void)
     
     /* USER CODE BEGIN RTOS_MUTEX */
     /* add mutexes, ... */
-    //xMutexI2C = xSemaphoreCreateMutex();
     /* USER CODE END RTOS_MUTEX */
     
     /* Create the semaphores(s) */
@@ -219,11 +232,11 @@ int main(void)
     
     /* definition and creation of TelemetryTask */
     osThreadDef(TelemetryTask, TelemetryStartTask, osPriorityBelowNormal, 0, 256);
-    //TelemetryTaskHandle = osThreadCreate(osThread(TelemetryTask), NULL);
+    TelemetryTaskHandle = osThreadCreate(osThread(TelemetryTask), NULL);
     
     /* definition and creation of TelemetryTask2 */
     osThreadDef(TelemetryTask2, TelemetryStartTask2, osPriorityBelowNormal, 0, 256);
-    TelemetryTask2Handle = osThreadCreate(osThread(TelemetryTask2), NULL);
+    //TelemetryTask2Handle = osThreadCreate(osThread(TelemetryTask2), NULL);
     
     /* definition and creation of MS5803Task */
     //osThreadDef(MS5803Task, MS5803StartTask, osPriorityNormal, 0, 512);
@@ -231,13 +244,13 @@ int main(void)
     
     /* USER CODE BEGIN RTOS_THREADS */
     /* add threads, ... */
-
+    
     /* Create the queue(s) */
-
+    
     
     /* USER CODE BEGIN RTOS_QUEUES */
     /* add queues, ... */
-        
+    
     myMailEM7180ToQuadHandle = osMailCreate(osMailQ(myMailEM7180ToQuadHandle), NULL);
     myMailEM7180ToAltHandle = osMailCreate(osMailQ(myMailEM7180ToAltHandle), NULL);
     myMailAltToQuadHandle = osMailCreate(osMailQ(myMailAltToQuadHandle), NULL);
@@ -259,7 +272,8 @@ int main(void)
         /* USER CODE END WHILE */
         
         /* USER CODE BEGIN 3 */
-        
+        UART_Print("RTOS Error");
+        HAL_Delay(1000);
     }
     /* USER CODE END 3 */
     
@@ -323,19 +337,32 @@ void QuadcopterStartTask(void const * argument)
         if(xQueueReceive(xQueueAltToQuad, &altitude_data, 0)){
         // Do stuff
     }
-                   
+        
     }*/
         //}
     }
 }
-
+VL53L0X_RangingMeasurementData_t vl53l0x_measurement;
 /* TelemetryStartTask function */
 void TelemetryStartTask(void const * argument)
 {
     /* USER CODE BEGIN TelemetryStartTask */
     /* Infinite loop */
+    uint16_t range_mm;
+    
     while(1){
         osDelay(200); // TODO: osDelayUntil
+        rangingTest(&vl53l0x_measurement);
+        if (vl53l0x_measurement.RangeStatus != 4) {  // phase failures have incorrect data
+            //printf2("Distance (mm): %d\n\r", vl53l0x_measurement.RangeMilliMeter);
+            range_mm = vl53l0x_measurement.RangeMilliMeter;
+            //in->range_cm = (float)in->range_mm / 10;
+        } else {
+            //printf2(" out of range ");
+            //in->range_cm = -1;
+            range_mm = -1;
+        }
+        UART_Print(" range %d", range_mm);
         //UART_Print("Total %d", xPortGetMinimumEverFreeHeapSize());
         //UART_Print(" pitch: %.4f", pitch);
         //UART_Print(" roll: %.4f", roll);
@@ -343,9 +370,9 @@ void TelemetryStartTask(void const * argument)
         //UART_Print(" gx: %.4f", gyro_x);
         //UART_Print(" gy: %.4f", gyro_y);
         //UART_Print(" gz: %.4f", gyro_z);
-        UART_Print(" y: %.4f", yaw);
-        UART_Print(" p: %.4f", pitch);
-        UART_Print(" r: %.4f", roll);
+        //UART_Print(" y: %.4f", yaw);
+        //UART_Print(" p: %.4f", pitch);
+        //UART_Print(" r: %.4f", roll);
         //UART_Print(" a1: %.4f", a1);
         //UART_Print(" a2: %.4f", a2);
         //UART_Print(" a3: %.4f", a3);

@@ -30,9 +30,10 @@ typedef struct{
 } em7180_attitude_data_t;
 
 typedef struct{
-    float altitude;
+    float altitude; // baro
     float acc_z;
-    float dt;
+    float dt;       // dt acc
+    float dt_baro;  // dt baro
 } em7180_altitude_data_t;
 
 typedef struct{
