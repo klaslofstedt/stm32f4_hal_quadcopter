@@ -48,16 +48,18 @@ typedef struct{
 
 typedef struct{
     float range;
+    float range_min;
+    float range_max;
     float dt;
 } vl53l0x_range_data_t;
 
 // Task level struct types
 //
-typedef struct{
+/*typedef struct{
     ypr_data_t angle;
     xyz_data_t gyro;
     float dt;
-} attitude_data_t;
+} attitude_data_t;*/
 
 typedef struct{
     float altitude;

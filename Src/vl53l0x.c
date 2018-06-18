@@ -1,5 +1,8 @@
+#include "stm32f4xx_hal.h"
+#include "cmsis_os.h"
 #include "vl53l0x.h"
 #include "uart_print.h"
+#include "types.h"
 
 #define VERSION_REQUIRED_MAJOR  1
 #define VERSION_REQUIRED_MINOR  0
@@ -15,6 +18,10 @@ VL53L0X_Version_t Version;
 VL53L0X_Version_t *pVersion   = &Version;
 VL53L0X_DeviceInfo_t DeviceInfo;
 
+VL53L0X_RangingMeasurementData_t vl53l0x_measurement;
+
+// Output mail
+extern osMailQId myMailVL53L0XToAltHandle;
 
 bool VL53L0X_init(void) 
 {
@@ -155,4 +162,47 @@ VL53L0X_Error rangingTest(VL53L0X_RangingMeasurementData_t* pRangingMeasurementD
     VL53L0X_getSingleRangingMeasurement(pRangingMeasurementData);
     
     return VL53L0X_ERROR_NONE;
-};
+}
+
+void VL53L0XStartTask(void const * argument)
+{    
+    uint16_t vl53l0x_range_mm;
+    uint32_t wakeTime = osKernelSysTick();
+    uint32_t lastTime = 0;
+    
+    //ms5803_altitude_data_t *ms5803_altitude_ptr;
+    vl53l0x_range_data_t *vl53l0x_range_ptr;
+    vl53l0x_range_ptr = osMailAlloc(myMailVL53L0XToAltHandle, osWaitForever);
+    
+    
+	while(1){
+        osDelayUntil(&wakeTime, 50);
+        HAL_GPIO_WritePin(GPIOB, GPIO_PIN_13, GPIO_PIN_SET);
+        
+        wakeTime = osKernelSysTick();
+        uint32_t dt = wakeTime - lastTime;
+        lastTime = wakeTime;
+        
+        rangingTest(&vl53l0x_measurement);
+        if (vl53l0x_measurement.RangeStatus != 4) {  // phase failures have incorrect data
+            //printf2("Distance (mm): %d\n\r", vl53l0x_measurement.RangeMilliMeter);
+            vl53l0x_range_mm = vl53l0x_measurement.RangeMilliMeter;
+            //in->range_cm = (float)in->range_mm / 10;
+        } else {
+            //printf2(" out of range ");
+            //in->range_cm = -1;
+            vl53l0x_range_mm = -1;
+        }
+        // Calculate dt
+        //UART_Print(" %.4f", (float)vl53l0x_range_mm/10);
+        //UART_Print(" %d", vl53l0x_range_mm);
+        // Assign pointer and convert from mm to cm
+        vl53l0x_range_ptr->range = (float)vl53l0x_range_mm/10;
+        vl53l0x_range_ptr->dt = (float)dt * 0.001;
+        vl53l0x_range_ptr->range_min = 2;
+        vl53l0x_range_ptr->range_max = 1500;
+        // Send data by mail to altitude task
+        osMailPut(myMailVL53L0XToAltHandle, vl53l0x_range_ptr);
+        HAL_GPIO_WritePin(GPIOB, GPIO_PIN_13, GPIO_PIN_RESET);
+    }
+}

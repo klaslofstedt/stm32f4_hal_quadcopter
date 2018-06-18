@@ -55,7 +55,7 @@ static uint32_t barometer_read_pressure(ms5803_pressure_t sens)
 		case MS5803_D1_512 : osDelay(3); break; 
 		case MS5803_D1_1024: osDelay(4); break; 
 		case MS5803_D1_2048: osDelay(6); break; 
-		case MS5803_D1_4096: osDelay(10); break; 
+		case MS5803_D1_4096: osDelay(9); break; 
 	}
     HAL_I2C_Mem_Read(&hi2c1, (uint16_t)MS5803_ADDRESS_HIGH << 1,  (uint8_t)MS5803_CMD_READ, 1, in_buffer, 3, 1000);
     //Sensors_I2C1_ReadRegister(MS5803_ADDRESS_HIGH, MS5803_CMD_READ, 3, in_buffer);
@@ -79,7 +79,7 @@ static uint32_t barometer_read_temperature(ms5803_temperature_t sens)
 		case MS5803_D2_512 : osDelay(3); break; 
 		case MS5803_D2_1024: osDelay(4); break; 
 		case MS5803_D2_2048: osDelay(6); break; 
-		case MS5803_D2_4096: osDelay(10); break; 
+		case MS5803_D2_4096: osDelay(9); break; 
 	}
     HAL_I2C_Mem_Read(&hi2c1, (uint16_t)MS5803_ADDRESS_HIGH << 1, MS5803_CMD_READ, 1, in_buffer, 3, 1000);
 
@@ -93,15 +93,16 @@ static void barometer_reset(ms5803_cmd_t reset)
     uint8_t data_send[1];
     data_send[0] = reset;
     HAL_I2C_Master_Transmit(&hi2c1, (uint16_t)MS5803_ADDRESS_HIGH << 1, data_send, 1, 1000);
-    osDelay(1000); // TODO: HAL_Delay?
-
+    HAL_Delay(1000);
 }
 
 void MS5803_Read(float *pressure, float *temperature, ms5803_pressure_t pressure_sens, ms5803_temperature_t temp_sens)
 {
     int32_t pressure_raw = barometer_read_pressure(pressure_sens);
+    //UART_Print(" %d\n\r", pressure_raw);
     //D1 = pressure_raw;
     int32_t temperature_raw = barometer_read_temperature(temp_sens);
+    //UART_Print(" %d\n\r", temperature_raw);
     //D2 = temperature_raw;
     int32_t temp_calc;
 	int32_t pressure_calc;	
@@ -223,22 +224,33 @@ const char *MS5803_getErrorString(void)
 void MS5803StartTask(void const * argument)
 {    
     uint32_t wakeTime = osKernelSysTick();
+    uint32_t lastTime = 0;
     
     //ms5803_altitude_data_t *ms5803_altitude_ptr;
+    ms5803_altitude_data_t *ms5803_altitude_ptr;
+    ms5803_altitude_ptr = osMailAlloc(myMailMS5803ToAltHandle, osWaitForever);
+    
     
 	while(1){
-        osDelayUntil(&wakeTime, 40);
+        osDelayUntil(&wakeTime, 20);
         HAL_GPIO_WritePin(GPIOB, GPIO_PIN_14, GPIO_PIN_SET);
+        
+        wakeTime = osKernelSysTick();
+        uint32_t dt = wakeTime - lastTime;
+        lastTime = wakeTime;
+        
         float temperature, pressure;
         // Read barometer data
         MS5803_Read(&pressure, &temperature, MS5803_D1_4096, MS5803_D2_4096);
         float altitude = (float)(44307.7 * (1.0 - (pow(pressure / 1013.25, 0.190284))));
+        //UART_Print(" %.4f\n\r", altitude);
+        // Calculate dt
         
-        //ms5803_altitude_ptr->altitude = altitude;
-        // Pass struct with barometric data to the Altitude task
-        
-        //ms5803_altitude_ptr = osMailAlloc(myMailMS5803ToAltHandle, 0);
-        //osMailPut(myMailMS5803ToAltHandle, ms5803_altitude_ptr);
+        // Assign pointer
+        ms5803_altitude_ptr->altitude = altitude;
+        ms5803_altitude_ptr->dt = (float)dt * 0.001;
+        // Send data by mail to altitude task
+        osMailPut(myMailMS5803ToAltHandle, ms5803_altitude_ptr);
         HAL_GPIO_WritePin(GPIOB, GPIO_PIN_14, GPIO_PIN_RESET);
     }
 }

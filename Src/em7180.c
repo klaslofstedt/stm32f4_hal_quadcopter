@@ -688,7 +688,7 @@ void EM7180StartTask(void const * argument)
     // Gravitational contribution to acceleration
     float a1, a2, a3;
     //
-    bool newAltData = false;
+    //bool newAltData = false;
     uint32_t wakeTime = osKernelSysTick();
     uint32_t lastTime = 0;
     
@@ -697,13 +697,13 @@ void EM7180StartTask(void const * argument)
    
 	while(1){
         osSemaphoreWait(myBinarySemEM7180InterruptHandle, osWaitForever);
+        //HAL_GPIO_WritePin(GPIOB, GPIO_PIN_13, GPIO_PIN_SET);
         
+        em7180_attitude_data_t *em7180_attitude_ptr;
+        em7180_attitude_ptr = osMailAlloc(myMailEM7180ToQuadHandle, osWaitForever);
         
-        em7180_attitude_data_t *attitude_ptr;
-        attitude_ptr = osMailAlloc(myMailEM7180ToQuadHandle, osWaitForever);
-        
-        em7180_altitude_data_t *altitude_ptr;
-        altitude_ptr = osMailAlloc(myMailEM7180ToAltHandle, osWaitForever);
+        em7180_altitude_data_t *em7180_altitude_ptr;
+        em7180_altitude_ptr = osMailAlloc(myMailEM7180ToAltHandle, osWaitForever);
         
         EM7180_checkEventStatus();
         
@@ -714,20 +714,23 @@ void EM7180StartTask(void const * argument)
         
         if (EM7180_gotQuaternion()) {             
             EM7180_readQuaternion(&qw, &qx, &qy, &qz);
-            
+            // Calculate YPR from quaternions
             roll  = atan2(2.0f * (qw * qx + qy * qz), qw * qw - qx * qx - qy * qy + qz * qz);
             pitch = -asin(2.0f * (qx * qz - qw * qy));
             yaw   = atan2(2.0f * (qx * qy + qw * qz), qw * qw + qx * qx - qy * qy - qz * qz);   
-            
+            // Convert from rad to deg
             pitch *= 180.0f / M_PI;
+            roll  *= 180.0f / M_PI;
             yaw   *= 180.0f / M_PI; 
             //yaw   += 13.8f; // Declination at Danville, California is 13 degrees 48 minutes and 47 seconds on 2014-04-04
-            if(yaw < 0) yaw += 360.0f; // Ensure yaw stays between 0 and 360
-            roll  *= 180.0f / M_PI;
-            
-            attitude_ptr->angle.yaw = yaw;
-            attitude_ptr->angle.pitch = pitch;
-            attitude_ptr->angle.roll = roll;
+            // Ensure yaw stays between 0 and 360
+            if(yaw < 0){
+                yaw += 360.0f; 
+            }
+            // Assign the em7180-to-quadcopter pointer
+            em7180_attitude_ptr->angle.yaw = yaw;
+            em7180_attitude_ptr->angle.pitch = pitch;
+            em7180_attitude_ptr->angle.roll = roll;
         }
         
         if (EM7180_gotGyrometer()) { // 250Hz
@@ -738,9 +741,9 @@ void EM7180StartTask(void const * argument)
             gyro_y = (float)gy / GYRO_SCALE; 
             gyro_z = (float)gz / GYRO_SCALE; 
             
-            attitude_ptr->gyro.x = gyro_x;
-            attitude_ptr->gyro.y = gyro_y;
-            attitude_ptr->gyro.z = gyro_z;
+            em7180_attitude_ptr->gyro.x = gyro_x;
+            em7180_attitude_ptr->gyro.y = gyro_y;
+            em7180_attitude_ptr->gyro.z = gyro_z;
         }
         
         if (EM7180_gotAccelerometer()){ // 250Hz
@@ -764,7 +767,7 @@ void EM7180StartTask(void const * argument)
             acc_z *= 9.80665f * 100.0f;
             //heading_data.acc_x = acc_x;
             //heading_data.acc_y = acc_y;
-            altitude_ptr->acc_z = acc_z;
+            em7180_altitude_ptr->acc_z = acc_z;
         }
         
         if(EM7180_gotBarometer()) { // 50Hz
@@ -772,29 +775,29 @@ void EM7180StartTask(void const * argument)
             EM7180_readBarometer(&pressure, &temperature);
             
             float altitude = (1.0f - powf(pressure / 1013.25f, 0.190295f)) * 44330.0f;
-            
+            // Calculate the ~50Hz dt
             wakeTimeBaro = osKernelSysTick();
             uint32_t dt_baro = wakeTimeBaro - lastTimeBaro;
             lastTimeBaro = wakeTimeBaro;
-            
-            altitude_ptr->dt_baro = (float)dt_baro*0.001;
-            altitude_ptr->altitude = altitude;
+            // Assign em7180-to-altitude pointer and convert from ms to s
+            em7180_altitude_ptr->dt_baro = (float)dt_baro*0.001;
+            em7180_altitude_ptr->altitude = altitude;
             //newAltData = true;
         }
         
-        // Calculate dt
+        // Calculate ~250Hz dt
         wakeTime = osKernelSysTick();
         uint32_t dt = wakeTime - lastTime;
         lastTime = wakeTime;
         // Convert from milliseconds to seconds
-        attitude_ptr->dt = (float)dt*0.001;
-        altitude_ptr->dt = (float)dt*0.001;
+        em7180_attitude_ptr->dt = (float)dt*0.001;
+        em7180_altitude_ptr->dt = (float)dt*0.001;
         
         // Send attitude data by mail to quadcopter task 250 Hz
-        osMailPut(myMailEM7180ToQuadHandle, attitude_ptr);
-        // Send altitude data by mail to altitude task 50 Hz
-        osMailPut(myMailEM7180ToAltHandle, altitude_ptr);
+        osMailPut(myMailEM7180ToQuadHandle, em7180_attitude_ptr);
+        // Send altitude data by mail to altitude task 250 Hz
+        osMailPut(myMailEM7180ToAltHandle, em7180_altitude_ptr);
         
-        HAL_GPIO_WritePin(GPIOB, GPIO_PIN_13, GPIO_PIN_RESET);
+        //HAL_GPIO_WritePin(GPIOB, GPIO_PIN_13, GPIO_PIN_RESET);
 	}
 }

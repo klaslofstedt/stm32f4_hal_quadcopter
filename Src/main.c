@@ -84,7 +84,8 @@ UART_HandleTypeDef huart6;
 osThreadId EM7180TaskHandle;
 osThreadId AltitudeTaskHandle;
 osThreadId QuadcopterTaskHandle;
-//osThreadId MS5803TaskHandle;
+osThreadId MS5803TaskHandle;
+osThreadId VL53L0XTaskHandle;
 osThreadId TelemetryTaskHandle;
 osThreadId TelemetryTask2Handle;
 
@@ -98,18 +99,14 @@ osMailQId myMailEM7180ToQuadHandle;
 osMailQDef(myMailEM7180ToAltHandle, 1, em7180_altitude_data_t);
 osMailQId myMailEM7180ToAltHandle;
 
-//osMailQDef(myMailMS5803ToAltHandle, 1, ms5803_altitude_data_t);
-//osMailQId myMailMS5803ToAltHandle;
+osMailQDef(myMailMS5803ToAltHandle, 1, ms5803_altitude_data_t);
+osMailQId myMailMS5803ToAltHandle;
 
 osMailQDef(myMailAltToQuadHandle, 1, altitude_data_t);
 osMailQId myMailAltToQuadHandle;
 
-
-
-//xQueueHandle xQueueEM7180ToQuad;
-//xQueueHandle xQueueEM7180ToAlt;
-//xQueueHandle xQueueAltToQuad;
-//xQueueHandle xQueueMS5803ToAlt;
+osMailQDef(myMailVL53L0XToAltHandle, 1, vl53l0x_range_data_t);
+osMailQId myMailVL53L0XToAltHandle;
 
 
 #ifndef M_PI
@@ -179,6 +176,7 @@ int main(void)
     }else{ // Print error message
         UART_Print(EM7180_getErrorString());
     }
+    
     // Initialize VL53L0X (laser)
     if(VL53L0X_init()){ // TODO: Init with i2c struct, interrupt and Hz
         UART_Print("VL53L0X Initialized\n\r");
@@ -188,11 +186,11 @@ int main(void)
     }
     
     // Initialize MS5803 (baro)
-    /*if(MS5803_Init()){ // TODO: Init with i2c
-    UART_Print("MS5803 Initialized\n\r");
-}else{ // Print error message
-    UART_Print(MS5803_getErrorString());
-}*/
+    if(MS5803_Init()){ // TODO: Init with i2c
+        UART_Print("MS5803 Initialized\n\r");
+    }else{ // Print error message
+        UART_Print(MS5803_getErrorString());
+    }
     // Initialize laser
     
     // Initialize GPS
@@ -230,17 +228,21 @@ int main(void)
     osThreadDef(QuadcopterTask, QuadcopterStartTask, osPriorityNormal, 0, 256);
     QuadcopterTaskHandle = osThreadCreate(osThread(QuadcopterTask), NULL);
     
+    /* definition and creation of VL53L0XTask */
+    osThreadDef(VL53L0XTask, VL53L0XStartTask, osPriorityNormal, 0, 256);
+    VL53L0XTaskHandle = osThreadCreate(osThread(VL53L0XTask), NULL);
+    
     /* definition and creation of TelemetryTask */
     osThreadDef(TelemetryTask, TelemetryStartTask, osPriorityBelowNormal, 0, 256);
-    TelemetryTaskHandle = osThreadCreate(osThread(TelemetryTask), NULL);
+    //TelemetryTaskHandle = osThreadCreate(osThread(TelemetryTask), NULL);
     
     /* definition and creation of TelemetryTask2 */
     osThreadDef(TelemetryTask2, TelemetryStartTask2, osPriorityBelowNormal, 0, 256);
-    //TelemetryTask2Handle = osThreadCreate(osThread(TelemetryTask2), NULL);
+    TelemetryTask2Handle = osThreadCreate(osThread(TelemetryTask2), NULL);
     
     /* definition and creation of MS5803Task */
-    //osThreadDef(MS5803Task, MS5803StartTask, osPriorityNormal, 0, 512);
-    //MS5803TaskHandle = osThreadCreate(osThread(MS5803Task), NULL);
+    osThreadDef(MS5803Task, MS5803StartTask, osPriorityBelowNormal, 0, 512);
+    MS5803TaskHandle = osThreadCreate(osThread(MS5803Task), NULL);
     
     /* USER CODE BEGIN RTOS_THREADS */
     /* add threads, ... */
@@ -254,9 +256,8 @@ int main(void)
     myMailEM7180ToQuadHandle = osMailCreate(osMailQ(myMailEM7180ToQuadHandle), NULL);
     myMailEM7180ToAltHandle = osMailCreate(osMailQ(myMailEM7180ToAltHandle), NULL);
     myMailAltToQuadHandle = osMailCreate(osMailQ(myMailAltToQuadHandle), NULL);
-    //myMailMS5803ToAltHandle = osMailCreate(osMailQ(myMailMS5803ToAltHandle), NULL);
-    //myMailMS5803ToAltHandle = osMailCreate(osMailQ(myMailEM7180ToQuadHandle), NULL);
-    
+    myMailMS5803ToAltHandle = osMailCreate(osMailQ(myMailMS5803ToAltHandle), NULL);
+    myMailVL53L0XToAltHandle = osMailCreate(osMailQ(myMailVL53L0XToAltHandle), NULL);
     /* USER CODE END RTOS_QUEUES */
     
     /* Start scheduler */
@@ -301,18 +302,19 @@ int main(void)
 /* USER CODE END 4 */
 
 /* StartQuadcopterTask function */
-float yaw, pitch, roll;
-
+static float yaw, pitch, roll;
+static float altitude, velocity, dt;
 void QuadcopterStartTask(void const * argument)
 {
     /* USER CODE BEGIN StartQuadcopterTask */
     em7180_attitude_data_t *attitude_ptr;
     osEvent EM7180Event;
     
-    //altitude_data_t *altitude_ptr;
-    //osEvent AltitudeEvent;
+    altitude_data_t *altitude_ptr;
+    osEvent AltitudeEvent;
     /* Infinite loop */
     while(1){
+        // Wait on attitude data from em7180 task
         EM7180Event = osMailGet(myMailEM7180ToQuadHandle, osWaitForever);
         HAL_GPIO_WritePin(GPIOB, GPIO_PIN_15, GPIO_PIN_SET);
         if (EM7180Event.status == osEventMail) {
@@ -323,6 +325,19 @@ void QuadcopterStartTask(void const * argument)
             roll = attitude_ptr->angle.roll;
             
             osMailFree(myMailEM7180ToQuadHandle, attitude_ptr);
+        }
+        
+        // Wait on altitude data from altitude task
+        AltitudeEvent = osMailGet(myMailAltToQuadHandle, 0); //osWaitForever
+        //HAL_GPIO_WritePin(GPIOB, GPIO_PIN_15, GPIO_PIN_SET);
+        if (AltitudeEvent.status == osEventMail) {
+            altitude_ptr = AltitudeEvent.value.p;
+            
+            altitude = altitude_ptr->altitude;
+            velocity = altitude_ptr->velocity;
+            //dt = altitude_ptr->angle.roll;
+            
+            osMailFree(myMailAltToQuadHandle, altitude_ptr);
         }
         HAL_GPIO_WritePin(GPIOB, GPIO_PIN_15, GPIO_PIN_RESET);
         //evt = osMessageGet(myQueueEM7180ToQuadHandle, osWaitForever);  // wait for message
@@ -342,37 +357,26 @@ void QuadcopterStartTask(void const * argument)
         //}
     }
 }
-VL53L0X_RangingMeasurementData_t vl53l0x_measurement;
+//VL53L0X_RangingMeasurementData_t vl53l0x_measurement;
 /* TelemetryStartTask function */
 void TelemetryStartTask(void const * argument)
 {
     /* USER CODE BEGIN TelemetryStartTask */
     /* Infinite loop */
-    uint16_t range_mm;
+    //uint16_t range_mm;
     
     while(1){
         osDelay(200); // TODO: osDelayUntil
-        rangingTest(&vl53l0x_measurement);
-        if (vl53l0x_measurement.RangeStatus != 4) {  // phase failures have incorrect data
-            //printf2("Distance (mm): %d\n\r", vl53l0x_measurement.RangeMilliMeter);
-            range_mm = vl53l0x_measurement.RangeMilliMeter;
-            //in->range_cm = (float)in->range_mm / 10;
-        } else {
-            //printf2(" out of range ");
-            //in->range_cm = -1;
-            range_mm = -1;
-        }
-        UART_Print(" range %d", range_mm);
+        
+        //UART_Print(" range %d", range_mm);
         //UART_Print("Total %d", xPortGetMinimumEverFreeHeapSize());
-        //UART_Print(" pitch: %.4f", pitch);
-        //UART_Print(" roll: %.4f", roll);
-        //UART_Print(" yaw: %.4f", yaw);
         //UART_Print(" gx: %.4f", gyro_x);
         //UART_Print(" gy: %.4f", gyro_y);
         //UART_Print(" gz: %.4f", gyro_z);
-        //UART_Print(" y: %.4f", yaw);
-        //UART_Print(" p: %.4f", pitch);
-        //UART_Print(" r: %.4f", roll);
+        UART_Print(" y: %.4f", yaw);
+        UART_Print(" p: %.4f", pitch);
+        UART_Print(" r: %.4f", roll);
+        UART_Print(" a: %.4f", altitude);
         //UART_Print(" a1: %.4f", a1);
         //UART_Print(" a2: %.4f", a2);
         //UART_Print(" a3: %.4f", a3);
