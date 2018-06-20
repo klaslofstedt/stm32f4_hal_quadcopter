@@ -12,32 +12,33 @@
 #define ESC_INIT_LOW 0
 #define ESC_INIT_HIGH 850
 
-#define TIM_PRESCALER 6
+#define TIM_PRESCALER 7
+
 
 //static uint32_t pwm_min, pwm_max;
 
 void ESC_SetSpeed(uint32_t channel, float speed)
 {
     // Calculate min and max pwm value from micro seconds
-    uint32_t pwm_min = ((SystemCoreClock/1000000) / (2 * TIM_PRESCALER)) * ESC_MIN;
-    uint32_t pwm_max = ((SystemCoreClock/1000000) / (2 * TIM_PRESCALER)) * ESC_MAX;
+    uint32_t pwm_min = ((SystemCoreClock/1000000) / (1 * TIM_PRESCALER)) * ESC_MIN;
+    uint32_t pwm_max = ((SystemCoreClock/1000000) / (1 * TIM_PRESCALER)) * ESC_MAX;
     // Contrain speed to a value between 0 and 1
     //constrain(speed, 0.0f, 1.0f);
     // Calculate the PWM value from micro seconds
     uint32_t pwm = pwm_min + (uint32_t)(speed * (pwm_max - pwm_min));
-    __HAL_TIM_SET_COMPARE(&htim4, channel, pwm);
+    __HAL_TIM_SET_COMPARE(&htim1, channel, pwm);
 }
 
 
 void ESC_Init(uint32_t channel)
 {
    
-    HAL_TIM_PWM_Start(&htim4, channel);
+    HAL_TIM_PWM_Start(&htim1, channel);
     HAL_Delay(500); // Maybe not needed
-	uint32_t pwm = (((SystemCoreClock/1000000) / (2 * TIM_PRESCALER)) * (ESC_INIT_HIGH));
-    __HAL_TIM_SET_COMPARE(&htim4, channel, pwm);
+	uint32_t pwm = (((SystemCoreClock/1000000) / (1 * TIM_PRESCALER)) * (ESC_INIT_HIGH));
+    __HAL_TIM_SET_COMPARE(&htim1, channel, pwm);
     //uart_printf("pin: %d pwm: %d\n\r", esc->pin_number, ((SystemCoreClock/1000000) / (2 * prescaler)) * (ESC_INIT_HIGH));
 	HAL_Delay(2500);
     // Set PWM to 0 before returning from function
-    __HAL_TIM_SET_COMPARE(&htim4, channel, 0);
+    __HAL_TIM_SET_COMPARE(&htim1, channel, 0);
 }

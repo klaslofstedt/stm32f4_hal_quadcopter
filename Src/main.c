@@ -77,8 +77,14 @@
 I2C_HandleTypeDef hi2c1;
 I2C_HandleTypeDef hi2c3;
 
+TIM_HandleTypeDef htim1;
 TIM_HandleTypeDef htim2;
+TIM_HandleTypeDef htim3;
 TIM_HandleTypeDef htim4;
+TIM_HandleTypeDef htim5;
+TIM_HandleTypeDef htim9;
+TIM_HandleTypeDef htim10;
+TIM_HandleTypeDef htim12;
 
 UART_HandleTypeDef huart5;
 UART_HandleTypeDef huart2;
@@ -116,19 +122,6 @@ osMailQId myMailVL53L0XToAltHandle;
 #endif
 
 
-//#define TIMx                           TIM2
-//#define TIMx_CLK_ENABLE()              __HAL_RCC_TIM2_CLK_ENABLE()
-
-/* Definition for TIMx Pins */
-//#define TIMx_CHANNEL_GPIO_PORT()       __HAL_RCC_GPIOA_CLK_ENABLE()
-//#define GPIO_PORT                      GPIOA
-//#define GPIO_PIN_CHANNEL2              GPIO_PIN_1
-//#define GPIO_AF_TIMx                   GPIO_AF2_TIM2
-
-/* Definition for TIMx's NVIC */
-//#define TIMx_IRQn                      TIM2_IRQn
-//#define TIMx_IRQHandler                TIM2_IRQHandler
-
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -140,8 +133,6 @@ void MS5803StartTask(void const * argument);
 void TelemetryStartTask2(void const * argument);
 void VL53L0XStartTask(void const * argument);
 
-void HAL_TIM_MspPostInit(TIM_HandleTypeDef *htim);
-
 
 /* USER CODE BEGIN PFP */
 /* Private function prototypes -----------------------------------------------*/
@@ -150,44 +141,33 @@ void HAL_TIM_MspPostInit(TIM_HandleTypeDef *htim);
 
 /* USER CODE BEGIN 0 */
 
-TIM_HandleTypeDef        TimHandle;
+volatile uint32_t uwIC2Value2 = 0;
+volatile uint32_t uwDutyCycle2 = 0;
+volatile uint32_t uwFrequency2 = 0;
 
-/* Timer Input Capture Configuration Structure declaration */
-TIM_IC_InitTypeDef       sConfig;
-
-/* Slave configuration structure */
-TIM_SlaveConfigTypeDef   sSlaveConfig;
-/* Captured Value */
-__IO uint32_t            uwIC2Value = 0;
-/* Duty Cycle Value */
-__IO uint32_t            uwDutyCycle = 0;
-/* Frequency Value */
-__IO uint32_t            uwFrequency = 0;
-
+// TODO: figure out how to use this function for all timers
 void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
 {
     if (htim->Channel == HAL_TIM_ACTIVE_CHANNEL_2)
     {
         /* Get the Input Capture value */
-        uwIC2Value = HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_2);
+        uwIC2Value2 = HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_2);
         
-        if (uwIC2Value != 0)
+        if (uwIC2Value2 != 0)
         {
             /* uwFrequency computation
             TIM4 counter clock = (RCC_Clocks.HCLK_Frequency)/2 */
-            uwFrequency = SystemCoreClock / (2 * 1000* uwIC2Value);
+            uwFrequency2 = SystemCoreClock / (2 * 1000* uwIC2Value2);
             //uwFrequency = (HAL_RCC_GetHCLKFreq())/2 / uwIC2Value;
             
             /* Duty cycle computation */
-            uwDutyCycle = ((1000 - (((HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_1)) * 1000) / (uwIC2Value))) * 1000 / uwFrequency);
-            //uwDutyCycle = ((HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_1)) * 1000*1000) / (uwIC2Value * uwFrequency);
-            
-            
+            uwDutyCycle2 = ((1000 - (((HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_1)) * 1000) / (uwIC2Value2))) * 1000 / uwFrequency2);
+            //uwDutyCycle = ((HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_1)) * 1000*1000) / (uwIC2Value * uwFrequency); 
         }
         else
         {
-            uwDutyCycle = 0;
-            uwFrequency = 0;
+            uwDutyCycle2 = 0;
+            uwFrequency2 = 0;
         }
     }
 }
@@ -229,6 +209,12 @@ int main(void)
     MX_USART6_UART_Init();
     MX_UART5_Init();
     MX_TIM2_Init();
+    MX_TIM1_Init();
+    MX_TIM9_Init();
+    MX_TIM12_Init();
+    MX_TIM3_Init();
+    MX_TIM5_Init();
+    MX_TIM10_Init();
     /* USER CODE BEGIN 2 */
     
     
@@ -253,80 +239,22 @@ int main(void)
     }else{ // Print error message
         UART_Print(MS5803_getErrorString());
     }
-    
-    //HAL_TIM_Base_Start_IT(&htim1);
-    //HAL_TIM_IC_Start_IT(&htim1, TIM_CHANNEL_1);
-    //HAL_TIM_IC_Start_IT(&htim1, TIM_CHANNEL_2);
+
     // Initialize ESCs
-    // Prescaler = 6-1;
-    // Period = (((SystemCoreClock / 2) / 400) / 6) -1;
+    // Prescaler = 8-1;
+    // Period = (((SystemCoreClock / 1) / 400) / 7) -1; // 8 ist för 7??
     ESC_Init(TIM_CHANNEL_1);
     ESC_Init(TIM_CHANNEL_2);
     //ESC_Init(TIM_CHANNEL_3);
     //ESC_Init(TIM_CHANNEL_4);
     
-    //TimHandle.Instance = TIMx;
-    
-    /* Initialize TIMx peripheral as follow:
-    + Period = 0xFFFF
-    + Prescaler = 0
-    + ClockDivision = 0
-    + Counter direction = Up
-    */
-    /*TimHandle.Init.Period = 0xFFFF;
-    TimHandle.Init.Prescaler = 1000;
-    TimHandle.Init.ClockDivision = 0;
-    TimHandle.Init.CounterMode = TIM_COUNTERMODE_UP;  
-    if(HAL_TIM_IC_Init(&TimHandle) != HAL_OK)
-    {
-
-        Error_Handler();
-    }*/
-    
-    /*##-2- Configure the Input Capture channels ###############################*/ 
-    /* Common configuration */
-    //sConfig.ICPrescaler = TIM_ICPSC_DIV1;
-    //sConfig.ICFilter = 0;  
-    
-    /* Configure the Input Capture of channel 1 */
-    //sConfig.ICPolarity = TIM_ICPOLARITY_FALLING;
-    //sConfig.ICSelection = TIM_ICSELECTION_INDIRECTTI;    
-    //if(HAL_TIM_IC_ConfigChannel(&TimHandle, &sConfig, TIM_CHANNEL_1) != HAL_OK)
-    //{
-        /* Configuration Error */
-        //Error_Handler();
-    //}
-    
-    /* Configure the Input Capture of channel 2 */
-    /*sConfig.ICPolarity = TIM_ICPOLARITY_RISING;
-    sConfig.ICSelection = TIM_ICSELECTION_DIRECTTI;
-    if(HAL_TIM_IC_ConfigChannel(&TimHandle, &sConfig, TIM_CHANNEL_2) != HAL_OK)
-    {
-        Error_Handler();
-    }*/
-    /*##-3- Configure the slave mode ###########################################*/
-    /* Select the slave Mode: Reset Mode */
-    /*sSlaveConfig.SlaveMode     = TIM_SLAVEMODE_RESET;
-    sSlaveConfig.InputTrigger  = TIM_TS_TI2FP2;
-    if(HAL_TIM_SlaveConfigSynchronization(&TimHandle, &sSlaveConfig) != HAL_OK)
-    {
-        
-        Error_Handler();
-    }*/
-    
-    /*##-4- Start the Input Capture in interrupt mode ##########################*/
-    if(HAL_TIM_IC_Start_IT(&htim2, TIM_CHANNEL_2) != HAL_OK)
-    {
-        /* Starting Error */
-        Error_Handler();
-    }
-    
-    /*##-5- Start the Input Capture in interrupt mode ##########################*/
-    if(HAL_TIM_IC_Start_IT(&htim2, TIM_CHANNEL_1) != HAL_OK)
-    {
-        /* Starting Error */
-        Error_Handler();
-    }
+    // PWM Input Timer 2
+    HAL_TIM_IC_Start_IT(&htim2, TIM_CHANNEL_2);
+    HAL_TIM_IC_Start_IT(&htim2, TIM_CHANNEL_1);
+    // PWM Input Timer 4
+    HAL_TIM_IC_Start_IT(&htim4, TIM_CHANNEL_2);
+    HAL_TIM_IC_Start_IT(&htim4, TIM_CHANNEL_1);
+ 
     
     /* USER CODE END 2 */
     
@@ -412,7 +340,6 @@ int main(void)
 }
 
 
-
 /* USER CODE BEGIN 4 */
 
 // GPIO_PIN_12 altitude
@@ -435,7 +362,6 @@ static float altitude, velocity, dt;
 //static float joystick_lx, joystick_ly, joystick_rx, joystick_ry;
 
 /* USER CODE END 4 */
-
 
 /* QuadcopterStartTask function */
 void QuadcopterStartTask(void const * argument)
@@ -515,13 +441,12 @@ void TelemetryStartTask(void const * argument)
         // Read joystick
         //joy_count = __HAL_TIM_GET_COUNTER(&htim1);
         
-        UART_Print(" pwm: %d", uwDutyCycle);
-        UART_Print(" freq: %d", uwFrequency);
+        UART_Print(" pwm: %d", uwDutyCycle2);
+        UART_Print(" freq: %d", uwFrequency2);
         UART_Print("\n\r");
     }
     /* USER CODE END TelemetryStartTask */
 }
-
 
 /**
 * @brief  This function is executed in case of error occurrence.
