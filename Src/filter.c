@@ -31,3 +31,8 @@ void filter_lowpass(filter_lowpass_t *temp)
     temp->output = temp->output_last + alpha*(temp->input - temp->output_last);
     temp->output_last = temp->output;
 }
+
+float filter_transition(float data1, float data2, float damping)
+{
+    return (data1 * (1.0f - damping) + data2 * damping);
+}

@@ -23,7 +23,7 @@ VL53L0X_RangingMeasurementData_t vl53l0x_measurement;
 // Output mail
 extern osMailQId myMailVL53L0XToAltHandle;
 
-bool VL53L0X_init(void) 
+bool VL53L0X_Init(void) 
 {
     //UART_Print("Init VL53L0X\n\r");
     //int32_t   status_int;
@@ -174,9 +174,9 @@ void VL53L0XStartTask(void const * argument)
     vl53l0x_range_data_t *vl53l0x_range_ptr;
     vl53l0x_range_ptr = osMailAlloc(myMailVL53L0XToAltHandle, osWaitForever);
     
-    
+    // TODO: change to 50 (while not printing over uart)
 	while(1){
-        osDelayUntil(&wakeTime, 50);
+        osDelayUntil(&wakeTime, 100);
         HAL_GPIO_WritePin(GPIOB, GPIO_PIN_13, GPIO_PIN_SET);
         
         wakeTime = osKernelSysTick();
@@ -199,8 +199,6 @@ void VL53L0XStartTask(void const * argument)
         // Assign pointer and convert from mm to cm
         vl53l0x_range_ptr->range = (float)vl53l0x_range_mm/10;
         vl53l0x_range_ptr->dt = (float)dt * 0.001;
-        vl53l0x_range_ptr->range_min = 2;
-        vl53l0x_range_ptr->range_max = 1500;
         // Send data by mail to altitude task
         osMailPut(myMailVL53L0XToAltHandle, vl53l0x_range_ptr);
         HAL_GPIO_WritePin(GPIOB, GPIO_PIN_13, GPIO_PIN_RESET);

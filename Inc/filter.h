@@ -25,5 +25,6 @@ typedef struct{
 
 void filter_average(filter_average_t *temp);
 void filter_lowpass(filter_lowpass_t *temp);
+float filter_transition(float data1, float data2, float damping);
 
 #endif

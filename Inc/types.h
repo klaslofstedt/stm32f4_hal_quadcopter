@@ -48,8 +48,6 @@ typedef struct{
 
 typedef struct{
     float range;
-    float range_min;
-    float range_max;
     float dt;
 } vl53l0x_range_data_t;
 

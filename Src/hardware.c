@@ -179,11 +179,11 @@ void MX_TIM4_Init(void)
     TIM_ClockConfigTypeDef sClockSourceConfig;
     TIM_MasterConfigTypeDef sMasterConfig;
     TIM_OC_InitTypeDef sConfigOC;
-    
+  
     htim4.Instance = TIM4;
-    htim4.Init.Prescaler = 65;
+    htim4.Init.Prescaler = 5;//65;
     htim4.Init.CounterMode = TIM_COUNTERMODE_UP;
-    htim4.Init.Period = 52499;
+    htim4.Init.Period = (((SystemCoreClock / 2) / 400) / 6) -1;//52499;
     htim4.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
     if (HAL_TIM_Base_Init(&htim4) != HAL_OK)
     {

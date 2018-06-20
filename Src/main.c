@@ -61,6 +61,8 @@
 #include "altitude.h"
 #include "heading.h"
 #include "ms5803.h"
+#include "pid.h"
+#include "esc.h"
 
 #include "vl53l0x.h"
 #include "vl53l0x_api.h"
@@ -135,6 +137,8 @@ void TelemetryStartTask(void const * argument);
 *
 * @retval None
 */
+
+
 int main(void)
 {
     /* USER CODE BEGIN 1 */
@@ -178,7 +182,7 @@ int main(void)
     }
     
     // Initialize VL53L0X (laser)
-    if(VL53L0X_init()){ // TODO: Init with i2c struct, interrupt and Hz
+    if(VL53L0X_Init()){ // TODO: Init with i2c struct, interrupt and Hz
         UART_Print("VL53L0X Initialized\n\r");
     }else{ // Print error message
         UART_Print("VL53L0X Error (but will likely work anyway)\n\r");
@@ -191,11 +195,17 @@ int main(void)
     }else{ // Print error message
         UART_Print(MS5803_getErrorString());
     }
-    // Initialize laser
     
-    // Initialize GPS
+    HAL_TIM_IC_Start_IT(&htim1, TIM_CHANNEL_2);
+    // Initialize ESCs
+    // Prescaler = 6-1;
+    // Period = (((SystemCoreClock / 2) / 400) / 6) -1;
+    ESC_Init(TIM_CHANNEL_1);
+    //ESC_Init(TIM_CHANNEL_2);
+    //ESC_Init(TIM_CHANNEL_3);
+    //ESC_Init(TIM_CHANNEL_4);
     
-    
+
     /* USER CODE END 2 */
     
     /* USER CODE BEGIN RTOS_MUTEX */
@@ -222,7 +232,7 @@ int main(void)
     
     /* definition and creation of AltitudeTask */
     osThreadDef(AltitudeTask, AltitudeStartTask, osPriorityNormal, 0, 512);
-    AltitudeTaskHandle = osThreadCreate(osThread(AltitudeTask), NULL);
+    //AltitudeTaskHandle = osThreadCreate(osThread(AltitudeTask), NULL);
     
     /* definition and creation of QuadcopterTask */
     osThreadDef(QuadcopterTask, QuadcopterStartTask, osPriorityNormal, 0, 256);
@@ -230,19 +240,19 @@ int main(void)
     
     /* definition and creation of VL53L0XTask */
     osThreadDef(VL53L0XTask, VL53L0XStartTask, osPriorityNormal, 0, 256);
-    VL53L0XTaskHandle = osThreadCreate(osThread(VL53L0XTask), NULL);
+    //VL53L0XTaskHandle = osThreadCreate(osThread(VL53L0XTask), NULL);
     
     /* definition and creation of TelemetryTask */
     osThreadDef(TelemetryTask, TelemetryStartTask, osPriorityBelowNormal, 0, 256);
-    //TelemetryTaskHandle = osThreadCreate(osThread(TelemetryTask), NULL);
+    TelemetryTaskHandle = osThreadCreate(osThread(TelemetryTask), NULL);
     
     /* definition and creation of TelemetryTask2 */
     osThreadDef(TelemetryTask2, TelemetryStartTask2, osPriorityBelowNormal, 0, 256);
-    TelemetryTask2Handle = osThreadCreate(osThread(TelemetryTask2), NULL);
+    //TelemetryTask2Handle = osThreadCreate(osThread(TelemetryTask2), NULL);
     
     /* definition and creation of MS5803Task */
     osThreadDef(MS5803Task, MS5803StartTask, osPriorityBelowNormal, 0, 512);
-    MS5803TaskHandle = osThreadCreate(osThread(MS5803Task), NULL);
+    //MS5803TaskHandle = osThreadCreate(osThread(MS5803Task), NULL);
     
     /* USER CODE BEGIN RTOS_THREADS */
     /* add threads, ... */
@@ -304,14 +314,21 @@ int main(void)
 /* StartQuadcopterTask function */
 static float yaw, pitch, roll;
 static float altitude, velocity, dt;
+static float joystick_lx, joystick_ly, joystick_rx, joystick_ry;
+uint32_t joy_count = 0, joy_capture = 0;
 void QuadcopterStartTask(void const * argument)
 {
     /* USER CODE BEGIN StartQuadcopterTask */
+    ESC_SetSpeed(TIM_CHANNEL_1, 1.0f);
+    
+    
     em7180_attitude_data_t *attitude_ptr;
     osEvent EM7180Event;
     
     altitude_data_t *altitude_ptr;
     osEvent AltitudeEvent;
+    
+    
     /* Infinite loop */
     while(1){
         // Wait on attitude data from em7180 task
@@ -339,32 +356,20 @@ void QuadcopterStartTask(void const * argument)
             
             osMailFree(myMailAltToQuadHandle, altitude_ptr);
         }
+        
+        // Read joystick
+        joy_count = __HAL_TIM_GET_COUNTER(&htim1); //TIM_CHANNEL_2);
+        joy_capture = __HAL_TIM_GET_COMPARE(&htim1, TIM_CHANNEL_2);
         HAL_GPIO_WritePin(GPIOB, GPIO_PIN_15, GPIO_PIN_RESET);
-        //evt = osMessageGet(myQueueEM7180ToQuadHandle, osWaitForever);  // wait for message
-        //if (evt.status == osEventMessage) {
-        //rptr = evt.value.p;
-        
-        //osPoolFree(mpool, rptr);                  // free memory allocated for message
-        /*if(xQueueReceive(xQueueEM7180ToQuad, &attitude_data, portMAX_DELAY)){
-        
-        //HAL_GPIO_TogglePin(GPIOD, LD6_Pin);
-        // Altitude
-        if(xQueueReceive(xQueueAltToQuad, &altitude_data, 0)){
-        // Do stuff
-    }
-        
-    }*/
-        //}
     }
 }
-//VL53L0X_RangingMeasurementData_t vl53l0x_measurement;
+
 /* TelemetryStartTask function */
 void TelemetryStartTask(void const * argument)
 {
     /* USER CODE BEGIN TelemetryStartTask */
     /* Infinite loop */
-    //uint16_t range_mm;
-    
+
     while(1){
         osDelay(200); // TODO: osDelayUntil
         
@@ -373,13 +378,21 @@ void TelemetryStartTask(void const * argument)
         //UART_Print(" gx: %.4f", gyro_x);
         //UART_Print(" gy: %.4f", gyro_y);
         //UART_Print(" gz: %.4f", gyro_z);
+        
         UART_Print(" y: %.4f", yaw);
         UART_Print(" p: %.4f", pitch);
         UART_Print(" r: %.4f", roll);
         UART_Print(" a: %.4f", altitude);
+        
         //UART_Print(" a1: %.4f", a1);
         //UART_Print(" a2: %.4f", a2);
         //UART_Print(" a3: %.4f", a3);
+        
+        // Read joystick
+        joy_count = __HAL_TIM_GET_COUNTER(&htim1);
+        joy_capture = __HAL_TIM_GET_COMPARE(&htim1, TIM_CHANNEL_2);
+        UART_Print(" count: %d", joy_count);
+        UART_Print(" cap: %d", joy_capture);
         UART_Print("\n\r");
     }
     /* USER CODE END TelemetryStartTask */
