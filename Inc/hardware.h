@@ -22,6 +22,7 @@ extern I2C_HandleTypeDef hi2c3;
 
 extern TIM_HandleTypeDef htim1;
 extern TIM_HandleTypeDef htim4;
+extern TIM_HandleTypeDef htim2;
 extern TIM_HandleTypeDef htim9;
 
 extern UART_HandleTypeDef huart5;
@@ -33,6 +34,7 @@ void MX_GPIO_Init(void);
 void MX_I2C1_Init(void);
 void MX_I2C3_Init(void);
 void MX_TIM1_Init(void);
+void MX_TIM2_Init(void);
 void MX_TIM4_Init(void);
 void MX_TIM9_Init(void);
 void MX_USART2_UART_Init(void);
