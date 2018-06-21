@@ -73,6 +73,13 @@
 #include "vl53l0x_platform.h"
 
 #include "types.h"
+
+#ifndef M_PI
+#define M_PI 3.14159265358979
+#endif
+
+#define HOVER_THRUST 0.542f
+
 /* USER CODE END Includes */
 
 /* Private variables ---------------------------------------------------------*/
@@ -118,11 +125,39 @@ osMailQId myMailAltToQuadHandle;
 osMailQDef(myMailVL53L0XToAltHandle, 1, Vl53l0xRange_t);
 osMailQId myMailVL53L0XToAltHandle;
 
+// PID objcts
 
-#ifndef M_PI
-#define M_PI 3.14159265358979
-#endif
+PID_t yawPid = {
+    .boundary_max = 1.0f,
+    .boundary_min = -1.0f,
+    .k_p = -0.003,
+    .k_i = 0.0f,
+    .k_d = 0.0
+};
 
+PID_t pitchPid = {
+    .boundary_max = 1.0f,
+    .boundary_min = -1.0f,
+    .k_p = 0.0061,
+    .k_i = 0.000001f,
+    .k_d = 0.0004f
+};
+
+PID_t rollPid = {
+    .boundary_max = 1.0f,
+    .boundary_min = -1.0f,
+    .k_p = 0.0061,
+    .k_i = 0.000001f,
+    .k_d = 0.0004f
+};
+
+PID_t altitudePid = {
+    .boundary_max = 0.3f,
+    .boundary_min = -0.3f,
+    .k_p = 0.009f,
+    .k_i = 0.0f,
+    .k_d = 0.8f
+};
 
 /* USER CODE END PV */
 
@@ -143,12 +178,12 @@ void VL53L0XStartTask(void const * argument);
 
 /* USER CODE BEGIN 0 */
 
-Joystick_t joystickYaw;
-Joystick_t joystickPitch;
-Joystick_t joystickRoll;
-Joystick_t joystickThrust;
-Joystick_t joystickSwitchL;
-Joystick_t joystickSwitchR;
+Joystick_t yawJoystick;
+Joystick_t pitchJoystick;
+Joystick_t rollJoystick;
+Joystick_t thrustJoystick;
+Joystick_t switchlJoystick;
+Joystick_t switchrJoystick;
 /* USER CODE END 0 */
 
 /**
@@ -195,6 +230,38 @@ int main(void)
     MX_TIM10_Init();
     /* USER CODE BEGIN 2 */
     
+    // PWM Input Timer 2
+    HAL_TIM_IC_Start_IT(&htim2, TIM_CHANNEL_2);
+    HAL_TIM_IC_Start_IT(&htim2, TIM_CHANNEL_1);
+    // PWM Input Timer 3
+    HAL_TIM_IC_Start_IT(&htim3, TIM_CHANNEL_2);
+    HAL_TIM_IC_Start_IT(&htim3, TIM_CHANNEL_1);
+    // PWM Input Timer 4
+    HAL_TIM_IC_Start_IT(&htim4, TIM_CHANNEL_2);
+    HAL_TIM_IC_Start_IT(&htim4, TIM_CHANNEL_1);
+    // PWM Input Timer 5
+    HAL_TIM_IC_Start_IT(&htim5, TIM_CHANNEL_2);
+    HAL_TIM_IC_Start_IT(&htim5, TIM_CHANNEL_1);
+    // PWM Input Timer 9
+    HAL_TIM_IC_Start_IT(&htim9, TIM_CHANNEL_2);
+    HAL_TIM_IC_Start_IT(&htim9, TIM_CHANNEL_1);
+    // PWM Input Timer 12
+    HAL_TIM_IC_Start_IT(&htim12, TIM_CHANNEL_2);
+    HAL_TIM_IC_Start_IT(&htim12, TIM_CHANNEL_1);
+    
+    // Initialize ESCs
+    ESC_Init(TIM_CHANNEL_1);
+    ESC_Init(TIM_CHANNEL_2);
+    //ESC_Init(TIM_CHANNEL_3);
+    //ESC_Init(TIM_CHANNEL_4);
+    
+    // Initialize joystick
+    Joystick_Init(&yawJoystick, TIM2);
+    Joystick_Init(&pitchJoystick, TIM3);
+    Joystick_Init(&rollJoystick, TIM4);
+    Joystick_Init(&thrustJoystick, TIM5);
+    Joystick_Init(&switchlJoystick, TIM9);
+    Joystick_Init(&switchrJoystick, TIM12);
     
     // Initialize EM7180 (gyro, acc, mag, baro)
     if(EM7180_Init()){ // TODO: Init with i2c struct, interrupt and Hz
@@ -218,40 +285,6 @@ int main(void)
         UART_Print(MS5803_GetErrorString());
     }
 
-    // Initialize ESCs
-    // Prescaler = 8-1;
-    // Period = (((SystemCoreClock / 1) / 400) / 7) -1; // 8 ist för 7??
-    ESC_Init(TIM_CHANNEL_1);
-    ESC_Init(TIM_CHANNEL_2);
-    //ESC_Init(TIM_CHANNEL_3);
-    //ESC_Init(TIM_CHANNEL_4);
-    
-    // PWM Input Timer 2
-    HAL_TIM_IC_Start_IT(&htim2, TIM_CHANNEL_2);
-    HAL_TIM_IC_Start_IT(&htim2, TIM_CHANNEL_1);
-    // PWM Input Timer 3
-    HAL_TIM_IC_Start_IT(&htim3, TIM_CHANNEL_2);
-    HAL_TIM_IC_Start_IT(&htim3, TIM_CHANNEL_1);
-     // PWM Input Timer 4
-    HAL_TIM_IC_Start_IT(&htim4, TIM_CHANNEL_2);
-    HAL_TIM_IC_Start_IT(&htim4, TIM_CHANNEL_1);
-        // PWM Input Timer 5
-    HAL_TIM_IC_Start_IT(&htim5, TIM_CHANNEL_2);
-    HAL_TIM_IC_Start_IT(&htim5, TIM_CHANNEL_1);
-        // PWM Input Timer 9
-    HAL_TIM_IC_Start_IT(&htim9, TIM_CHANNEL_2);
-    HAL_TIM_IC_Start_IT(&htim9, TIM_CHANNEL_1);
-        // PWM Input Timer 12
-    HAL_TIM_IC_Start_IT(&htim12, TIM_CHANNEL_2);
-    HAL_TIM_IC_Start_IT(&htim12, TIM_CHANNEL_1);
-    
-    
-    Joystick_Init(&joystickYaw, TIM2);
-    Joystick_Init(&joystickPitch, TIM3);
-    Joystick_Init(&joystickRoll, TIM4);
-    Joystick_Init(&joystickThrust, TIM5);
-    Joystick_Init(&joystickSwitchL, TIM9);
-    Joystick_Init(&joystickSwitchR, TIM12);
     /* USER CODE END 2 */
     
     /* USER CODE BEGIN RTOS_MUTEX */
@@ -353,8 +386,10 @@ int main(void)
 //float gyro_x, gyro_y, gyro_z;
 // Angles in degrees
 
-static float yaw, pitch, roll;
-static float altitude, velocity, dt;
+float yawAngle, pitchAngle, rollAngle;
+float yawRate, pitchRate, rollRate;
+float altitude, altitudeVelocity;
+uint32_t attitudeDt, altitudeDt;
 //static float joystick_lx, joystick_ly, joystick_rx, joystick_ry;
 
 /* USER CODE END 4 */
@@ -373,45 +408,77 @@ void QuadcopterStartTask(void const * argument)
     osEvent AltitudeEvent;
     /* Infinite loop */
     while(1){
-        // Wait on attitude data from em7180 task
+        // Wait on attitude data from em7180 task (250 Hz)
         EM7180Event = osMailGet(myMailEM7180ToQuadHandle, osWaitForever);
         HAL_GPIO_WritePin(GPIOB, GPIO_PIN_15, GPIO_PIN_SET);
         if (EM7180Event.status == osEventMail) {
             pEm7180Attitude = EM7180Event.value.p;
-            
-            yaw = pEm7180Attitude->angle.yaw;
-            pitch = pEm7180Attitude->angle.pitch;
-            roll = pEm7180Attitude->angle.roll;
-            
+            // Get angle (degrees)
+            yawAngle    = pEm7180Attitude->angle.yaw;
+            pitchAngle  = pEm7180Attitude->angle.pitch;
+            rollAngle   = pEm7180Attitude->angle.roll;
+            // Get angular rate (degrees/s?) 
+            yawRate     = pEm7180Attitude->gyro.z;
+            pitchRate   = pEm7180Attitude->gyro.y;
+            rollRate    = pEm7180Attitude->gyro.x;
+            // Get dt timestamp (milliseconds?)
+            attitudeDt  = pEm7180Attitude->dt;
+            // Free the allocated struct memory
             osMailFree(myMailEM7180ToQuadHandle, pEm7180Attitude);
         }
         
-        // Wait on altitude data from altitude task
-        AltitudeEvent = osMailGet(myMailAltToQuadHandle, 0); //osWaitForever
+        // Poll altitude data from altitude task (50 Hz)
+        AltitudeEvent = osMailGet(myMailAltToQuadHandle, 0);
         //HAL_GPIO_WritePin(GPIOB, GPIO_PIN_15, GPIO_PIN_SET);
         if (AltitudeEvent.status == osEventMail) {
             pAltitude = AltitudeEvent.value.p;
-            
+            // Get the altitude (cm)
             altitude = pAltitude->altitude;
-            velocity = pAltitude->velocity;
-            //dt = pAltitude->angle.roll;
-            
+            // Get the altitudal velocity (cm/s?)
+            altitudeVelocity = pAltitude->velocity;
+            // Get dt timestamp (milliseconds?)
+            altitudeDt  = pAltitude->dt;
+            // Free the allocated struct memory
             osMailFree(myMailAltToQuadHandle, pAltitude);
         }
         
-        // Read joystick and map according to PID (-1, 1) from micro seconds (1000, 2000)
-        float yawSetpoint = mapf(Joystick_ReadDuty(&joystickYaw), 1000, 2000, -1.0f, 1.0f);
-        /*float setpoint_pitch = mapf(Joystick_ReadDuty(&joystickPitch), 1000, 2000, -1.0f, 1.0f);
-        float setpoint_roll = mapf(Joystick_ReadDuty(&joystickRoll), 1000, 2000, -1.0f, 1.0f);
-        float setpoint_thrust = mapf(Joystick_ReadDuty(&joystickThrust), 1000, 2000, -1.0f, 1.0f);
-        float setpoint_lswitch = mapf(Joystick_ReadDuty(&joystickSwitchL), 1000, 2000, -1.0f, 1.0f);
-        float setpoint_rswitch = mapf(Joystick_ReadDuty(&joystickSwitchR), 1000, 2000, -1.0f, 1.0f);
-        */
-        //PID_Calc(
-        // Build PID objects
-        
-        
-        
+        // Build yaw PID object
+        yawPid.setpoint = Joystick_ReadDuty(&yawJoystick);
+        yawPid.input    = yawAngle;
+        yawPid.rate     = yawRate;
+        yawPid.dt       = attitudeDt;
+        // Build pitch PID object
+        pitchPid.setpoint = Joystick_ReadDuty(&pitchJoystick);
+        pitchPid.input    = pitchAngle;
+        pitchPid.rate     = pitchRate;
+        pitchPid.dt       = attitudeDt;
+        // Build roll PID object
+        rollPid.setpoint = Joystick_ReadDuty(&rollJoystick);
+        rollPid.input    = rollAngle;
+        rollPid.rate     = rollRate;
+        rollPid.dt       = attitudeDt;
+        // TODO: joystick thrust cannot return -1 to 1 but rather a higher/lower
+        // setpoint value
+        altitudePid.setpoint = 50;//Joystick_ReadDuty(&thrustJoystick);
+        altitudePid.input    = altitude;
+        altitudePid.rate     = altitudeVelocity;
+        altitudePid.dt       = altitudeDt;
+        // Calculate PID values
+        PID_Calc(&yawPid);
+        PID_Calc(&pitchPid);
+        PID_Calc(&rollPid);
+        PID_Calc(&altitudePid);
+        // Calculate the motor values
+        float esc1 = HOVER_THRUST + altitudePid.output + rollPid.output + pitchPid.output + yawPid.output;
+        float esc2 = HOVER_THRUST + altitudePid.output + rollPid.output - pitchPid.output - yawPid.output;
+        float esc3 = HOVER_THRUST + altitudePid.output - rollPid.output - pitchPid.output + yawPid.output;
+        float esc4 = HOVER_THRUST + altitudePid.output - rollPid.output + pitchPid.output - yawPid.output;
+        // Set motor speed
+        ESC_SetSpeed(TIM_CHANNEL_1, esc1);
+        ESC_SetSpeed(TIM_CHANNEL_2, esc2);
+        ESC_SetSpeed(TIM_CHANNEL_3, esc3);
+        ESC_SetSpeed(TIM_CHANNEL_4, esc4);
+
         HAL_GPIO_WritePin(GPIOB, GPIO_PIN_15, GPIO_PIN_RESET);
     }
     /* USER CODE END QuadcopterStartTask */
@@ -432,9 +499,9 @@ void TelemetryStartTask(void const * argument)
         //UART_Print(" gy: %.4f", gyro_y);
         //UART_Print(" gz: %.4f", gyro_z);
         
-        UART_Print(" y: %.4f", yaw);
-        UART_Print(" p: %.4f", pitch);
-        UART_Print(" r: %.4f", roll);
+        UART_Print(" y: %.4f", yawAngle);
+        UART_Print(" p: %.4f", pitchAngle);
+        UART_Print(" r: %.4f", rollAngle);
         UART_Print(" a: %.4f", altitude);
         
         //input_pwm_ch1 = TIM1->CCR1;
@@ -445,12 +512,12 @@ void TelemetryStartTask(void const * argument)
         //UART_Print(" a3: %.4f", a3);
         
         // Read joystick
-        UART_Print(" tim2: %d", Joystick_ReadDuty(&joystickYaw));
-        UART_Print(" tim3: %d", Joystick_ReadDuty(&joystickPitch));
-        UART_Print(" tim4: %d", Joystick_ReadDuty(&joystickRoll));
-        UART_Print(" tim5: %d", Joystick_ReadDuty(&joystickThrust));
-        UART_Print(" tim9: %d", Joystick_ReadDuty(&joystickSwitchL));
-        UART_Print(" tim12: %d", Joystick_ReadDuty(&joystickSwitchR));
+        UART_Print(" tim2: %.4f", Joystick_ReadDuty(&yawJoystick));
+        UART_Print(" tim3: %.4f", Joystick_ReadDuty(&pitchJoystick));
+        UART_Print(" tim4: %.4f", Joystick_ReadDuty(&rollJoystick));
+        UART_Print(" tim5: %.4f", Joystick_ReadDuty(&thrustJoystick));
+        UART_Print(" tim9: %.4f", Joystick_ReadDuty(&switchlJoystick));
+        UART_Print(" tim12: %.4f", Joystick_ReadDuty(&switchrJoystick));
         
         UART_Print("\n\r");
     }

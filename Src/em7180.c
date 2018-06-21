@@ -719,9 +719,9 @@ void EM7180StartTask(void const * argument)
             pitch = -asin(2.0f * (qx * qz - qw * qy));
             yaw   = atan2(2.0f * (qx * qy + qw * qz), qw * qw + qx * qx - qy * qy - qz * qz);   
             // Convert from rad to deg
-            pitch *= 180.0f / M_PI;
-            roll  *= 180.0f / M_PI;
-            yaw   *= 180.0f / M_PI; 
+            roll    *= 180.0f / M_PI;
+            pitch   *= 180.0f / M_PI;
+            yaw     *= 180.0f / M_PI; 
             //yaw   += 13.8f; // Declination at Danville, California is 13 degrees 48 minutes and 47 seconds on 2014-04-04
             // Ensure yaw stays between 0 and 360
             if(yaw < 0){

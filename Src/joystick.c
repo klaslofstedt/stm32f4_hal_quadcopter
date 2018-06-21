@@ -1,7 +1,12 @@
 #include "joystick.h"
 // Interrupts
 #include "stm32f4xx_it.h"
+#include "filter.h"
 
+#define JOYSTICK_READ_MIN       1000
+#define JOYSTICK_READ_MAX       2000
+#define JOYSTICK_OUTPUT_MIN     -1.0f
+#define JOYSTICK_OUTPUT_MAX     1.0f
 
 volatile uint32_t uwIC2Value2 = 0;
 volatile uint32_t uwDutyCycle2 = 0;
@@ -27,9 +32,7 @@ volatile uint32_t uwIC2Value12 = 0;
 volatile uint32_t uwDutyCycle12 = 0;
 volatile uint32_t uwFrequency12 = 0;
 
-//TIM_TypeDef *
 
-// TODO: figure out how to use this function for all timers
 void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
 {
     if (htim->Channel == HAL_TIM_ACTIVE_CHANNEL_2)
@@ -163,25 +166,25 @@ uint32_t Joystick_ReadFreq(Joystick_t *joystick)
     return 0;
 }
 
-uint32_t Joystick_ReadDuty(Joystick_t *joystick)
+float Joystick_ReadDuty(Joystick_t *joystick)
 {
     if(joystick->TIMx == TIM2){
-        return uwDutyCycle2;
+        return mapf((float)uwDutyCycle2, JOYSTICK_READ_MIN, JOYSTICK_READ_MAX, JOYSTICK_OUTPUT_MIN, JOYSTICK_OUTPUT_MAX);
     }
     if(joystick->TIMx == TIM3){
-        return uwDutyCycle3;
+        return mapf((float)uwDutyCycle3, JOYSTICK_READ_MIN, JOYSTICK_READ_MAX, JOYSTICK_OUTPUT_MIN, JOYSTICK_OUTPUT_MAX);
     }
     if(joystick->TIMx == TIM4){
-        return uwDutyCycle4;
+        return mapf((float)uwDutyCycle4, JOYSTICK_READ_MIN, JOYSTICK_READ_MAX, JOYSTICK_OUTPUT_MIN, JOYSTICK_OUTPUT_MAX);
     }
     if(joystick->TIMx == TIM5){
-        return uwDutyCycle5;
+        return mapf((float)uwDutyCycle5, JOYSTICK_READ_MIN, JOYSTICK_READ_MAX, JOYSTICK_OUTPUT_MIN, JOYSTICK_OUTPUT_MAX);
     }
     if(joystick->TIMx == TIM9){
-        return uwDutyCycle9;
+        return mapf((float)uwDutyCycle9, JOYSTICK_READ_MIN, JOYSTICK_READ_MAX, JOYSTICK_OUTPUT_MIN, JOYSTICK_OUTPUT_MAX);
     }
     if(joystick->TIMx == TIM12){
-        return uwDutyCycle12;
+        return mapf((float)uwDutyCycle12, JOYSTICK_READ_MIN, JOYSTICK_READ_MAX, JOYSTICK_OUTPUT_MIN, JOYSTICK_OUTPUT_MAX);
     }
     return 0;
 }

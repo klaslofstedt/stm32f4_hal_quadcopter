@@ -27,7 +27,7 @@ typedef struct{
 void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim);
 
 void Joystick_Init(Joystick_t *joystick, TIM_TypeDef *TIMx);
-uint32_t Joystick_ReadDuty(Joystick_t *joystick);
+float Joystick_ReadDuty(Joystick_t *joystick);
 uint32_t Joystick_ReadFreq(Joystick_t *joystick);
 
 //float joystick_read_setpoint(joystick_data_t* joystick);

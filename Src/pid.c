@@ -5,10 +5,11 @@
 // Might wanna have a better error handling when using delta input as rate:
 // https://github.com/Lauszus/LaunchPadFlightController/blob/fddbe4eb9303ea4301a714585d7383a2de275d80/src/PID.c
 
-void PID_Calc(PID_t *pid, unsigned long dt)
+void PID_Calc(PID_t *pid)
 {
     // These are used for ease to read
     float p_term, i_term, d_term, error, output;
+    float dt = (float)pid->dt;
     
     // Calculate input rate with derivation of position instead from EKF output
     // *** IMPORTANT *** Does it need low pass-filter?                        
@@ -20,7 +21,7 @@ void PID_Calc(PID_t *pid, unsigned long dt)
     p_term = pid->k_p * error;
 
     // Calculate the I contribution
-    pid->i_term += (float)(pid->k_i * (float)dt * ((error + pid->last_error) / 2.0f));
+    pid->i_term += (float)(pid->k_i * dt * ((error + pid->last_error) / 2.0f));
     if(pid->i_term > pid->boundary_max){
         pid->i_term = pid->boundary_max;
     }

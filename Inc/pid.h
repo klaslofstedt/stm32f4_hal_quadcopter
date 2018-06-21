@@ -1,6 +1,8 @@
 #ifndef PID_h
 #define PID_h
 
+#include <stdint.h>
+
 typedef struct{
     // Set these in init
     float k_p;
@@ -10,6 +12,7 @@ typedef struct{
     float setpoint;
     float boundary_max;
     float boundary_min;
+    uint32_t dt;
     // Temp variables not to be set
     float last_input;
     float rate;
@@ -19,6 +22,6 @@ typedef struct{
 	float output;
 }PID_t;
 
-void PID_Calc(PID_t *pid, unsigned long dt);
+void PID_Calc(PID_t *pid);
 
 #endif
