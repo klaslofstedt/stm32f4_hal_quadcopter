@@ -17,8 +17,8 @@ typedef struct{
 	float i_term;
     float last_error;
 	float output;
-}pid_data_t;
+}PID_t;
 
-void PID_Calc(pid_data_t* pid, unsigned long dt);
+void PID_Calc(PID_t *pid, unsigned long dt);
 
 #endif

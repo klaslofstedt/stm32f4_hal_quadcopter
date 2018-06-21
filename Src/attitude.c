@@ -26,7 +26,7 @@ void AttitudeTask(void *pvParameters)
             
             if (EM7180_gotError()) {  
                 UART_Print("EM7180 error: ");
-                UART_Print(EM7180_getErrorString());
+                UART_Print(EM7180_GetErrorString());
             }
             
             if (EM7180_gotQuaternion()) {

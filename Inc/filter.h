@@ -12,7 +12,7 @@ typedef struct{
     float total;
     float average;
     bool ready;
-} filter_average_t;
+} FilterAverage_t; // FilterAverage_t
 
 typedef struct{
     float input;
@@ -20,11 +20,13 @@ typedef struct{
     float output;
     float cf; //cut-off frequency (higher value lower filtering)
     float dt;
-} filter_lowpass_t;
+} FilterLowpass_t; // filterLowpass_t
 
+float mapf(float val, float in_min, float in_max, float out_min, float out_max);
+uint32_t map(uint32_t val, uint32_t in_min, uint32_t in_max, uint32_t out_min, uint32_t out_max);
 
-void filter_average(filter_average_t *temp);
-void filter_lowpass(filter_lowpass_t *temp);
-float filter_transition(float data1, float data2, float damping);
+void Filter_Average(FilterAverage_t *filter); // Filter_Average(filterAverage_t *avg)
+void Filter_Lowpass(FilterLowpass_t *filter); // Filter_Lowpass(filtlerLowpass_t *lp)
+float Filter_Transition(float data1, float data2, float damping); // Filter_Transition(
 
 #endif

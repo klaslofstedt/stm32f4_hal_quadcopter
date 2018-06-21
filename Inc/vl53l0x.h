@@ -22,6 +22,11 @@
 
 #define VL53L0X_I2C_ADDR  0x29
 
+typedef struct {
+    float range;
+    float dt;
+} Vl53l0xRange_t;     
+
 void VL53L0XStartTask(void const * argument);
 bool VL53L0X_Init();
 VL53L0X_Error rangingTest(VL53L0X_RangingMeasurementData_t* pRangingMeasurementData);

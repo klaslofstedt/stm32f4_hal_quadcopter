@@ -169,10 +169,9 @@ void VL53L0XStartTask(void const * argument)
     uint16_t vl53l0x_range_mm;
     uint32_t wakeTime = osKernelSysTick();
     uint32_t lastTime = 0;
-    
-    //ms5803_altitude_data_t *ms5803_altitude_ptr;
-    vl53l0x_range_data_t *vl53l0x_range_ptr;
-    vl53l0x_range_ptr = osMailAlloc(myMailVL53L0XToAltHandle, osWaitForever);
+
+    Vl53l0xRange_t *pVl53l0xRange;
+    pVl53l0xRange = osMailAlloc(myMailVL53L0XToAltHandle, osWaitForever);
     
     // TODO: change to 50 (while not printing over uart)
 	while(1){
@@ -197,10 +196,10 @@ void VL53L0XStartTask(void const * argument)
         //UART_Print(" %.4f", (float)vl53l0x_range_mm/10);
         //UART_Print(" %d", vl53l0x_range_mm);
         // Assign pointer and convert from mm to cm
-        vl53l0x_range_ptr->range = (float)vl53l0x_range_mm/10;
-        vl53l0x_range_ptr->dt = (float)dt * 0.001;
+        pVl53l0xRange->range = (float)vl53l0x_range_mm/10;
+        pVl53l0xRange->dt = (float)dt * 0.001;
         // Send data by mail to altitude task
-        osMailPut(myMailVL53L0XToAltHandle, vl53l0x_range_ptr);
+        osMailPut(myMailVL53L0XToAltHandle, pVl53l0xRange);
         HAL_GPIO_WritePin(GPIOB, GPIO_PIN_13, GPIO_PIN_RESET);
     }
 }

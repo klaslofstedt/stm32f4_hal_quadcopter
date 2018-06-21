@@ -66,6 +66,7 @@
 #include "pid.h"
 #include "esc.h"
 #include "joystick.h"
+#include "filter.h"
 
 #include "vl53l0x.h"
 #include "vl53l0x_api.h"
@@ -102,19 +103,19 @@ osSemaphoreId myBinarySemEM7180InterruptHandle;
 
 /* USER CODE BEGIN PV */
 /* Private variables ---------------------------------------------------------*/
-osMailQDef(myMailEM7180ToQuadHandle, 1, em7180_attitude_data_t);
+osMailQDef(myMailEM7180ToQuadHandle, 1, Em7180Attitude_t);
 osMailQId myMailEM7180ToQuadHandle;
 
-osMailQDef(myMailEM7180ToAltHandle, 1, em7180_altitude_data_t);
+osMailQDef(myMailEM7180ToAltHandle, 1, Em7180Altitude_t);
 osMailQId myMailEM7180ToAltHandle;
 
-osMailQDef(myMailMS5803ToAltHandle, 1, ms5803_altitude_data_t);
+osMailQDef(myMailMS5803ToAltHandle, 1, Ms5803Altitude_t);
 osMailQId myMailMS5803ToAltHandle;
 
-osMailQDef(myMailAltToQuadHandle, 1, altitude_data_t);
+osMailQDef(myMailAltToQuadHandle, 1, Altitude_t);
 osMailQId myMailAltToQuadHandle;
 
-osMailQDef(myMailVL53L0XToAltHandle, 1, vl53l0x_range_data_t);
+osMailQDef(myMailVL53L0XToAltHandle, 1, Vl53l0xRange_t);
 osMailQId myMailVL53L0XToAltHandle;
 
 
@@ -142,12 +143,12 @@ void VL53L0XStartTask(void const * argument);
 
 /* USER CODE BEGIN 0 */
 
-joystick_data_t joystick_yaw;
-joystick_data_t joystick_pitch;
-joystick_data_t joystick_roll;
-joystick_data_t joystick_thrust;
-joystick_data_t joystick_lswitch;
-joystick_data_t joystick_rswitch;
+Joystick_t joystickYaw;
+Joystick_t joystickPitch;
+Joystick_t joystickRoll;
+Joystick_t joystickThrust;
+Joystick_t joystickSwitchL;
+Joystick_t joystickSwitchR;
 /* USER CODE END 0 */
 
 /**
@@ -199,7 +200,7 @@ int main(void)
     if(EM7180_Init()){ // TODO: Init with i2c struct, interrupt and Hz
         UART_Print("EM7180 Initialized\n\r");
     }else{ // Print error message
-        UART_Print(EM7180_getErrorString());
+        UART_Print(EM7180_GetErrorString());
     }
     
     // Initialize VL53L0X (laser)
@@ -207,14 +208,14 @@ int main(void)
         UART_Print("VL53L0X Initialized\n\r");
     }else{ // Print error message
         UART_Print("VL53L0X Error (but will likely work anyway)\n\r");
-        //UART_Print(EM7180_getErrorString());
+        //UART_Print(EM7180_GetErrorString());
     }
     
     // Initialize MS5803 (baro)
     if(MS5803_Init()){ // TODO: Init with i2c
         UART_Print("MS5803 Initialized\n\r");
     }else{ // Print error message
-        UART_Print(MS5803_getErrorString());
+        UART_Print(MS5803_GetErrorString());
     }
 
     // Initialize ESCs
@@ -245,12 +246,12 @@ int main(void)
     HAL_TIM_IC_Start_IT(&htim12, TIM_CHANNEL_1);
     
     
-    Joystick_Init(&joystick_yaw, TIM2);
-    Joystick_Init(&joystick_pitch, TIM3);
-    Joystick_Init(&joystick_roll, TIM4);
-    Joystick_Init(&joystick_thrust, TIM5);
-    Joystick_Init(&joystick_lswitch, TIM9);
-    Joystick_Init(&joystick_rswitch, TIM12);
+    Joystick_Init(&joystickYaw, TIM2);
+    Joystick_Init(&joystickPitch, TIM3);
+    Joystick_Init(&joystickRoll, TIM4);
+    Joystick_Init(&joystickThrust, TIM5);
+    Joystick_Init(&joystickSwitchL, TIM9);
+    Joystick_Init(&joystickSwitchR, TIM12);
     /* USER CODE END 2 */
     
     /* USER CODE BEGIN RTOS_MUTEX */
@@ -365,10 +366,10 @@ void QuadcopterStartTask(void const * argument)
     ESC_SetSpeed(TIM_CHANNEL_1, 1.0f);
     ESC_SetSpeed(TIM_CHANNEL_2, 0.0f);
     
-    em7180_attitude_data_t *attitude_ptr;
+    Em7180Attitude_t *pEm7180Attitude;
     osEvent EM7180Event;
     
-    altitude_data_t *altitude_ptr;
+    Altitude_t *pAltitude;
     osEvent AltitudeEvent;
     /* Infinite loop */
     while(1){
@@ -376,35 +377,35 @@ void QuadcopterStartTask(void const * argument)
         EM7180Event = osMailGet(myMailEM7180ToQuadHandle, osWaitForever);
         HAL_GPIO_WritePin(GPIOB, GPIO_PIN_15, GPIO_PIN_SET);
         if (EM7180Event.status == osEventMail) {
-            attitude_ptr = EM7180Event.value.p;
+            pEm7180Attitude = EM7180Event.value.p;
             
-            yaw = attitude_ptr->angle.yaw;
-            pitch = attitude_ptr->angle.pitch;
-            roll = attitude_ptr->angle.roll;
+            yaw = pEm7180Attitude->angle.yaw;
+            pitch = pEm7180Attitude->angle.pitch;
+            roll = pEm7180Attitude->angle.roll;
             
-            osMailFree(myMailEM7180ToQuadHandle, attitude_ptr);
+            osMailFree(myMailEM7180ToQuadHandle, pEm7180Attitude);
         }
         
         // Wait on altitude data from altitude task
         AltitudeEvent = osMailGet(myMailAltToQuadHandle, 0); //osWaitForever
         //HAL_GPIO_WritePin(GPIOB, GPIO_PIN_15, GPIO_PIN_SET);
         if (AltitudeEvent.status == osEventMail) {
-            altitude_ptr = AltitudeEvent.value.p;
+            pAltitude = AltitudeEvent.value.p;
             
-            altitude = altitude_ptr->altitude;
-            velocity = altitude_ptr->velocity;
-            //dt = altitude_ptr->angle.roll;
+            altitude = pAltitude->altitude;
+            velocity = pAltitude->velocity;
+            //dt = pAltitude->angle.roll;
             
-            osMailFree(myMailAltToQuadHandle, altitude_ptr);
+            osMailFree(myMailAltToQuadHandle, pAltitude);
         }
         
         // Read joystick and map according to PID (-1, 1) from micro seconds (1000, 2000)
-        float YawSetpoint = mapf(Joystick_ReadDuty(&joystick_yaw), 1000, 2000, -1.0f, 1.0f);
-        /*float setpoint_pitch = mapf(Joystick_ReadDuty(&joystick_pitch), 1000, 2000, -1.0f, 1.0f);
-        float setpoint_roll = mapf(Joystick_ReadDuty(&joystick_roll), 1000, 2000, -1.0f, 1.0f);
-        float setpoint_thrust = mapf(Joystick_ReadDuty(&joystick_thrust), 1000, 2000, -1.0f, 1.0f);
-        float setpoint_lswitch = mapf(Joystick_ReadDuty(&joystick_lswitch), 1000, 2000, -1.0f, 1.0f);
-        float setpoint_rswitch = mapf(Joystick_ReadDuty(&joystick_rswitch), 1000, 2000, -1.0f, 1.0f);
+        float yawSetpoint = mapf(Joystick_ReadDuty(&joystickYaw), 1000, 2000, -1.0f, 1.0f);
+        /*float setpoint_pitch = mapf(Joystick_ReadDuty(&joystickPitch), 1000, 2000, -1.0f, 1.0f);
+        float setpoint_roll = mapf(Joystick_ReadDuty(&joystickRoll), 1000, 2000, -1.0f, 1.0f);
+        float setpoint_thrust = mapf(Joystick_ReadDuty(&joystickThrust), 1000, 2000, -1.0f, 1.0f);
+        float setpoint_lswitch = mapf(Joystick_ReadDuty(&joystickSwitchL), 1000, 2000, -1.0f, 1.0f);
+        float setpoint_rswitch = mapf(Joystick_ReadDuty(&joystickSwitchR), 1000, 2000, -1.0f, 1.0f);
         */
         //PID_Calc(
         // Build PID objects
@@ -431,10 +432,10 @@ void TelemetryStartTask(void const * argument)
         //UART_Print(" gy: %.4f", gyro_y);
         //UART_Print(" gz: %.4f", gyro_z);
         
-        //UART_Print(" y: %.4f", yaw);
-        //UART_Print(" p: %.4f", pitch);
-        //UART_Print(" r: %.4f", roll);
-        //UART_Print(" a: %.4f", altitude);
+        UART_Print(" y: %.4f", yaw);
+        UART_Print(" p: %.4f", pitch);
+        UART_Print(" r: %.4f", roll);
+        UART_Print(" a: %.4f", altitude);
         
         //input_pwm_ch1 = TIM1->CCR1;
         //input_pwm_ch2 = TIM1->CCR2;
@@ -444,12 +445,12 @@ void TelemetryStartTask(void const * argument)
         //UART_Print(" a3: %.4f", a3);
         
         // Read joystick
-        UART_Print(" tim2: %d", Joystick_ReadDuty(&joystick_yaw));
-        UART_Print(" tim3: %d", Joystick_ReadDuty(&joystick_pitch));
-        UART_Print(" tim4: %d", Joystick_ReadDuty(&joystick_roll));
-        UART_Print(" tim5: %d", Joystick_ReadDuty(&joystick_thrust));
-        UART_Print(" tim9: %d", Joystick_ReadDuty(&joystick_lswitch));
-        UART_Print(" tim12: %d", Joystick_ReadDuty(&joystick_rswitch));
+        UART_Print(" tim2: %d", Joystick_ReadDuty(&joystickYaw));
+        UART_Print(" tim3: %d", Joystick_ReadDuty(&joystickPitch));
+        UART_Print(" tim4: %d", Joystick_ReadDuty(&joystickRoll));
+        UART_Print(" tim5: %d", Joystick_ReadDuty(&joystickThrust));
+        UART_Print(" tim9: %d", Joystick_ReadDuty(&joystickSwitchL));
+        UART_Print(" tim12: %d", Joystick_ReadDuty(&joystickSwitchR));
         
         UART_Print("\n\r");
     }

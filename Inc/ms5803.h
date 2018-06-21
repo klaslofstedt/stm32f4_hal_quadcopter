@@ -39,11 +39,16 @@ typedef enum
     float temperature;   // Celsius
 } ms5803_data_t;*/
 
+typedef struct {
+    float altitude;
+    float dt;
+} Ms5803Altitude_t;
+
 //void barometer_task(void *pvParameters);
 bool MS5803_Init();
 void MS5803_Read(float *pressure, float *temperature, ms5803_pressure_t pressure_sens, ms5803_temperature_t temp_sens);
 //void MS5803_Read(barometer_data_t* barometer_data);
 void MS5803StartTask(void const * argument);
-const char *MS5803_getErrorString(void);
+const char *MS5803_GetErrorString(void);
 
 #endif

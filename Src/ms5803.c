@@ -212,7 +212,7 @@ static uint8_t barometer_validate_crc()
 }
 
 // TODO: More error messages
-const char *MS5803_getErrorString(void)
+const char *MS5803_GetErrorString(void)
 {
     if(!g_eventStatus){
         return "MS5803 CRC error";
@@ -226,9 +226,8 @@ void MS5803StartTask(void const * argument)
     uint32_t wakeTime = osKernelSysTick();
     uint32_t lastTime = 0;
     
-    //ms5803_altitude_data_t *ms5803_altitude_ptr;
-    ms5803_altitude_data_t *ms5803_altitude_ptr;
-    ms5803_altitude_ptr = osMailAlloc(myMailMS5803ToAltHandle, osWaitForever);
+    Ms5803Altitude_t *pMs5803Altitude;
+    pMs5803Altitude = osMailAlloc(myMailMS5803ToAltHandle, osWaitForever);
     
     
 	while(1){
@@ -247,10 +246,10 @@ void MS5803StartTask(void const * argument)
         // Calculate dt
         
         // Assign pointer
-        ms5803_altitude_ptr->altitude = altitude;
-        ms5803_altitude_ptr->dt = (float)dt * 0.001;
+        pMs5803Altitude->altitude = altitude;
+        pMs5803Altitude->dt = (float)dt * 0.001;
         // Send data by mail to altitude task
-        osMailPut(myMailMS5803ToAltHandle, ms5803_altitude_ptr);
+        osMailPut(myMailMS5803ToAltHandle, pMs5803Altitude);
         HAL_GPIO_WritePin(GPIOB, GPIO_PIN_14, GPIO_PIN_RESET);
     }
 }

@@ -8,6 +8,23 @@
 
 #include "types.h"
 
+typedef struct {
+    Ypr_t angle;
+    Xyz_t gyro;
+    float dt;
+} Em7180Attitude_t;
+
+typedef struct {
+    float altitude;
+    float acc_z;
+    float dt;
+    float dt_baro;
+} Em7180Altitude_t;
+
+typedef struct {
+    Xyz_t acc;
+    float dt;
+} Em7180Heading_t;
 
 
 void EM7180StartTask(void const * argument);
@@ -17,45 +34,45 @@ bool EM7180_EEPROM(void);
 bool EM7180_Passthru_begin(void);
 
 
-const char *EM7180_getErrorString(void);
+const char *EM7180_GetErrorString(void);
 
-uint8_t EM7180_getProductId(void); 
-uint8_t EM7180_getRevisionId(void); 
-uint16_t EM7180_getRamVersion(void);
-uint16_t EM7180_getRomVersion(void);
+uint8_t EM7180_GetProductId(void); 
+uint8_t EM7180_GetRevisionId(void); 
+uint16_t EM7180_GetRamVersion(void);
+uint16_t EM7180_GetRomVersion(void);
 
-bool EM7180_hasBaro(void);
-bool EM7180_hasHumidity(void);
-bool EM7180_hasTemperature(void);
-bool EM7180_hasCustom1(void);
-bool EM7180_hasCustom2(void);
-bool EM7180_hasCustom3(void);
+bool EM7180_HasBaro(void);
+bool EM7180_HasHumidity(void);
+bool EM7180_HasTemperature(void);
+bool EM7180_HasCustom1(void);
+bool EM7180_HasCustom2(void);
+bool EM7180_HasCustom3(void);
 
-void EM7180_checkEventStatus(void);
-bool EM7180_gotError(void);
-bool EM7180_gotQuaternion(void);
-bool EM7180_gotMagnetometer(void);
-bool EM7180_gotAccelerometer(void);
-bool EM7180_gotGyrometer(void);
-bool EM7180_gotBarometer(void);
-void EM7180_readMagnetometer(int16_t *mx, int16_t *my, int16_t *mz);
-void EM7180_readAccelerometer(int16_t *ax, int16_t *ay, int16_t *az);
-void EM7180_readGyrometer(int16_t *gx, int16_t *gy, int16_t *gz);
-void EM7180_readQuaternion(float *qw, float *qx, float *qy, float *qz);
-void EM7180_readBarometer(float *pressure, float *temperature);
-uint8_t EM7180_getActualMagRate();
-uint16_t EM7180_getActualAccelRate();
-uint16_t EM7180_getActualGyroRate();
-uint8_t EM7180_getActualBaroRate();
-uint8_t EM7180_getActualTempRate();
-bool EM7180_runStatusNormal(void);
-bool EM7180_algorithmStatusStandby(void);
-bool EM7180_algorithmStatusSlow(void);
-bool EM7180_algorithmStatusStillness(void);
-bool EM7180_algorithmStatusMagCalibrationCompleted(void);
-bool EM7180_algorithmStatusMagneticAnomalyDetected(void);
-bool EM7180_algorithmStatusUnreliableData(void);
-void EM7180_getFullScaleRanges(uint8_t *accFs, uint16_t *gyroFs, uint16_t *magFs);
+void EM7180_CheckEventStatus(void);
+bool EM7180_GotError(void);
+bool EM7180_GotQuaternion(void);
+bool EM7180_GotMagnetometer(void);
+bool EM7180_GotAccelerometer(void);
+bool EM7180_GotGyrometer(void);
+bool EM7180_GotBarometer(void);
+void EM7180_ReadMagnetometer(int16_t *mx, int16_t *my, int16_t *mz);
+void EM7180_ReadAccelerometer(int16_t *ax, int16_t *ay, int16_t *az);
+void EM7180_ReadGyrometer(int16_t *gx, int16_t *gy, int16_t *gz);
+void EM7180_ReadQuaternion(float *qw, float *qx, float *qy, float *qz);
+void EM7180_ReadBarometer(float *pressure, float *temperature);
+uint8_t EM7180_GetActualMagRate();
+uint16_t EM7180_GetActualAccelRate();
+uint16_t EM7180_GetActualGyroRate();
+uint8_t EM7180_GetActualBaroRate();
+uint8_t EM7180_GetActualTempRate();
+bool EM7180_RunStatusNormal(void);
+bool EM7180_AlgorithmStatusStandby(void);
+bool EM7180_AlgorithmStatusSlow(void);
+bool EM7180_AlgorithmStatusStillness(void);
+bool EM7180_AlgorithmStatusMagCalibrationCompleted(void);
+bool EM7180_AlgorithmStatusMagneticAnomalyDetected(void);
+bool EM7180_AlgorithmStatusUnreliableData(void);
+void EM7180_GetFullScaleRanges(uint8_t *accFs, uint16_t *gyroFs, uint16_t *magFs);
 
 
 bool EM7180_Passthru_begin(void);

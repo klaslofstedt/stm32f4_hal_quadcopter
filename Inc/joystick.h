@@ -22,13 +22,13 @@ typedef struct{
     float output;
     float output_limit;
     float avg[7];*/
-} joystick_data_t;
+} Joystick_t; //Joystick_InitTypeDef
 
 void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim);
 
-void Joystick_Init(joystick_data_t *joystick, TIM_TypeDef *TIMx);
-uint32_t Joystick_ReadDuty(joystick_data_t *joystick);
-uint32_t Joystick_ReadFreq(joystick_data_t *joystick);
+void Joystick_Init(Joystick_t *joystick, TIM_TypeDef *TIMx);
+uint32_t Joystick_ReadDuty(Joystick_t *joystick);
+uint32_t Joystick_ReadFreq(Joystick_t *joystick);
 
 //float joystick_read_setpoint(joystick_data_t* joystick);
 //float joystick_read_thrust(joystick_data_t* joystick);

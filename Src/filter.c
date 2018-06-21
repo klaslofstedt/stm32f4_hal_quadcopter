@@ -4,7 +4,8 @@
 #define M_PI 3.14159265358979
 #endif
 
-float mapf(float val, float in_min, float in_max, float out_min, float out_max) {
+float mapf(float val, float in_min, float in_max, float out_min, float out_max) 
+{
     return (val - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
 }
 
@@ -13,35 +14,35 @@ uint32_t map(uint32_t val, uint32_t in_min, uint32_t in_max, uint32_t out_min, u
     return (val - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
 }
 
-void filter_average(filter_average_t *temp)
+void Filter_Average(FilterAverage_t *avg)
 {
-    if(temp->counter <= temp->sample_start){
+    if(avg->counter <= avg->sample_start){
         // do nothing until samples has stabilized
-        temp->counter++;
+        avg->counter++;
     }
-    if((temp->counter > temp->sample_start) && (temp->counter < temp->sample_stop)){
-        temp->total += (temp->sample);
-        temp->counter++;
-        temp->average = temp->total /(temp->counter - temp->sample_start);
+    if((avg->counter > avg->sample_start) && (avg->counter < avg->sample_stop)){
+        avg->total += (avg->sample);
+        avg->counter++;
+        avg->average = avg->total /(avg->counter - avg->sample_start);
         //Serial.print(offset);
         //Serial.print(", ");
     }
-    if(temp->counter >= temp->sample_stop){
-        temp->ready = true; 
+    if(avg->counter >= avg->sample_stop){
+        avg->ready = true; 
     }
 }
 
-void filter_lowpass(filter_lowpass_t *temp)
+void Filter_Lowpass(FilterLowpass_t *lp)
 {
-    const float tau = 1.0f/(2.0f*M_PI*temp->cf); // Time constant
-    const float alpha = temp->dt/(tau + temp->dt); // See (10) in http://techteach.no/simview/lowpass_filter/doc/filter_algorithm.pdf
+    const float tau = 1.0f/(2.0f*M_PI*lp->cf); // Time constant
+    const float alpha = lp->dt/(tau + lp->dt); // See (10) in http://techteach.no/simview/lowpass_filter/doc/filter_algorithm.pdf
     
     // y(n) = y(n-1) + alpha*(u(n) - y(n-1))
-    temp->output = temp->output_last + alpha*(temp->input - temp->output_last);
-    temp->output_last = temp->output;
+    lp->output = lp->output_last + alpha*(lp->input - lp->output_last);
+    lp->output_last = lp->output;
 }
 
-float filter_transition(float data1, float data2, float damping)
+float Filter_Transition(float data1, float data2, float damping)
 {
     return (data1 * (1.0f - damping) + data2 * damping);
 }

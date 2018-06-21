@@ -41,14 +41,9 @@ void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
             
             if (uwIC2Value2 != 0)
             {
-                /* uwFrequency computation
-                TIM4 counter clock = (RCC_Clocks.HCLK_Frequency)/2 */
                 uwFrequency2 = SystemCoreClock / (2 * 1000* uwIC2Value2);
-                //uwFrequency = (HAL_RCC_GetHCLKFreq())/2 / uwIC2Value;
-                
-                /* Duty cycle computation */
-                uwDutyCycle2 = ((1000 - (((HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_1)) * 1000) / (uwIC2Value2))) * 1000 / uwFrequency2);
-                //uwDutyCycle = ((HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_1)) * 1000*1000) / (uwIC2Value * uwFrequency); 
+                uint32_t freqScale = 1000 / uwFrequency2;
+                uwDutyCycle2 = freqScale * (1000 - (HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_1) * 1000) / uwIC2Value2);
             }
             else
             {
@@ -63,14 +58,9 @@ void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
             
             if (uwIC2Value3 != 0)
             {
-                /* uwFrequency computation
-                TIM4 counter clock = (RCC_Clocks.HCLK_Frequency)/2 */
                 uwFrequency3 = SystemCoreClock / (2 * 1000* uwIC2Value3);
-                //uwFrequency = (HAL_RCC_GetHCLKFreq())/2 / uwIC2Value;
-                
-                /* Duty cycle computation */
-                uwDutyCycle3 = ((1000 - (((HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_1)) * 1000) / (uwIC2Value3))) * 1000 / uwFrequency3);
-                //uwDutyCycle = ((HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_1)) * 1000*1000) / (uwIC2Value * uwFrequency); 
+                uint32_t freqScale = 1000 / uwFrequency3;
+                uwDutyCycle3 = freqScale * (1000 - (HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_1) * 1000) / uwIC2Value3);
             }
             else
             {
@@ -85,14 +75,9 @@ void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
             
             if (uwIC2Value4 != 0)
             {
-                /* uwFrequency computation
-                TIM4 counter clock = (RCC_Clocks.HCLK_Frequency)/2 */
                 uwFrequency4 = SystemCoreClock / (2 * 1000* uwIC2Value4);
-                //uwFrequency = (HAL_RCC_GetHCLKFreq())/2 / uwIC2Value;
-                
-                /* Duty cycle computation */
-                uwDutyCycle4 = ((1000 - (((HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_1)) * 1000) / (uwIC2Value4))) * 1000 / uwFrequency4);
-                //uwDutyCycle = ((HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_1)) * 1000*1000) / (uwIC2Value * uwFrequency); 
+                uint32_t freqScale = 1000 / uwFrequency4;
+                uwDutyCycle4 = freqScale * (1000 - (HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_1) * 1000) / uwIC2Value4);
             }
             else
             {
@@ -107,14 +92,9 @@ void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
             
             if (uwIC2Value5 != 0)
             {
-                /* uwFrequency computation
-                TIM4 counter clock = (RCC_Clocks.HCLK_Frequency)/2 */
-                uwFrequency5= SystemCoreClock / (2 * 1000* uwIC2Value5);
-                //uwFrequency = (HAL_RCC_GetHCLKFreq())/2 / uwIC2Value;
-                
-                /* Duty cycle computation */
-                uwDutyCycle5 = (((((HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_2)) * 1000) / (uwIC2Value5))) * 1000 / uwFrequency5);
-                //uwDutyCycle = ((HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_1)) * 1000*1000) / (uwIC2Value * uwFrequency); 
+                uwFrequency5 = SystemCoreClock / (2 * 1000* uwIC2Value5);
+                uint32_t freqScale = 1000000 / uwFrequency5;
+                uwDutyCycle5 = HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_2) * freqScale / uwIC2Value5;
             }
             else
             {
@@ -129,14 +109,9 @@ void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
             
             if (uwIC2Value9 != 0)
             {
-                /* uwFrequency computation
-                TIM4 counter clock = (RCC_Clocks.HCLK_Frequency)/2 */
                 uwFrequency9 = SystemCoreClock / (1 * 1000* uwIC2Value9);
-                //uwFrequency = (HAL_RCC_GetHCLKFreq())/2 / uwIC2Value;
-                
-                /* Duty cycle computation */
-                uwDutyCycle9 = ((1000 - (((HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_1)) * 1000) / (uwIC2Value9))) * 1000 / uwFrequency9);
-                //uwDutyCycle = ((HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_1)) * 1000*1000) / (uwIC2Value * uwFrequency); 
+                uint32_t freqScale = 1000 / uwFrequency9;
+                uwDutyCycle9 = freqScale * (1000 - (HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_1) * 1000) / uwIC2Value9);
             }
             else
             {
@@ -151,14 +126,9 @@ void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
             
             if (uwIC2Value12 != 0)
             {
-                /* uwFrequency computation
-                TIM4 counter clock = (RCC_Clocks.HCLK_Frequency)/2 */
                 uwFrequency12 = SystemCoreClock / (2 * 1000* uwIC2Value12);
-                //uwFrequency = (HAL_RCC_GetHCLKFreq())/2 / uwIC2Value;
-                
-                /* Duty cycle computation */
-                uwDutyCycle12 = ((1000 - (((HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_1)) * 1000) / (uwIC2Value12))) * 1000 / uwFrequency12);
-                //uwDutyCycle = ((HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_1)) * 1000*1000) / (uwIC2Value * uwFrequency); 
+                uint32_t freqScale = 1000 / uwFrequency12;
+                uwDutyCycle12 = freqScale * (1000 - (HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_1) * 1000) / uwIC2Value12);
             }
             else
             {
@@ -170,7 +140,7 @@ void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
 }
 
 
-uint32_t Joystick_ReadFreq(joystick_data_t *joystick)
+uint32_t Joystick_ReadFreq(Joystick_t *joystick)
 {
     if(joystick->TIMx == TIM2){
         return uwFrequency2;
@@ -193,7 +163,7 @@ uint32_t Joystick_ReadFreq(joystick_data_t *joystick)
     return 0;
 }
 
-uint32_t Joystick_ReadDuty(joystick_data_t *joystick)
+uint32_t Joystick_ReadDuty(Joystick_t *joystick)
 {
     if(joystick->TIMx == TIM2){
         return uwDutyCycle2;
@@ -216,7 +186,7 @@ uint32_t Joystick_ReadDuty(joystick_data_t *joystick)
     return 0;
 }
 
-void Joystick_Init(joystick_data_t *joystick, TIM_TypeDef *TIMx)
+void Joystick_Init(Joystick_t *joystick, TIM_TypeDef *TIMx)
 {
     joystick->TIMx = TIMx;
 }
