@@ -65,6 +65,7 @@
 #include "ms5803.h"
 #include "pid.h"
 #include "esc.h"
+#include "joystick.h"
 
 #include "vl53l0x.h"
 #include "vl53l0x_api.h"
@@ -141,36 +142,12 @@ void VL53L0XStartTask(void const * argument);
 
 /* USER CODE BEGIN 0 */
 
-volatile uint32_t uwIC2Value2 = 0;
-volatile uint32_t uwDutyCycle2 = 0;
-volatile uint32_t uwFrequency2 = 0;
-
-// TODO: figure out how to use this function for all timers
-void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
-{
-    if (htim->Channel == HAL_TIM_ACTIVE_CHANNEL_2)
-    {
-        /* Get the Input Capture value */
-        uwIC2Value2 = HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_2);
-        
-        if (uwIC2Value2 != 0)
-        {
-            /* uwFrequency computation
-            TIM4 counter clock = (RCC_Clocks.HCLK_Frequency)/2 */
-            uwFrequency2 = SystemCoreClock / (2 * 1000* uwIC2Value2);
-            //uwFrequency = (HAL_RCC_GetHCLKFreq())/2 / uwIC2Value;
-            
-            /* Duty cycle computation */
-            uwDutyCycle2 = ((1000 - (((HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_1)) * 1000) / (uwIC2Value2))) * 1000 / uwFrequency2);
-            //uwDutyCycle = ((HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_1)) * 1000*1000) / (uwIC2Value * uwFrequency); 
-        }
-        else
-        {
-            uwDutyCycle2 = 0;
-            uwFrequency2 = 0;
-        }
-    }
-}
+joystick_data_t joystick_yaw;
+joystick_data_t joystick_pitch;
+joystick_data_t joystick_roll;
+joystick_data_t joystick_thrust;
+joystick_data_t joystick_lswitch;
+joystick_data_t joystick_rswitch;
 /* USER CODE END 0 */
 
 /**
@@ -251,11 +228,29 @@ int main(void)
     // PWM Input Timer 2
     HAL_TIM_IC_Start_IT(&htim2, TIM_CHANNEL_2);
     HAL_TIM_IC_Start_IT(&htim2, TIM_CHANNEL_1);
-    // PWM Input Timer 4
+    // PWM Input Timer 3
+    HAL_TIM_IC_Start_IT(&htim3, TIM_CHANNEL_2);
+    HAL_TIM_IC_Start_IT(&htim3, TIM_CHANNEL_1);
+     // PWM Input Timer 4
     HAL_TIM_IC_Start_IT(&htim4, TIM_CHANNEL_2);
     HAL_TIM_IC_Start_IT(&htim4, TIM_CHANNEL_1);
- 
+        // PWM Input Timer 5
+    HAL_TIM_IC_Start_IT(&htim5, TIM_CHANNEL_2);
+    HAL_TIM_IC_Start_IT(&htim5, TIM_CHANNEL_1);
+        // PWM Input Timer 9
+    HAL_TIM_IC_Start_IT(&htim9, TIM_CHANNEL_2);
+    HAL_TIM_IC_Start_IT(&htim9, TIM_CHANNEL_1);
+        // PWM Input Timer 12
+    HAL_TIM_IC_Start_IT(&htim12, TIM_CHANNEL_2);
+    HAL_TIM_IC_Start_IT(&htim12, TIM_CHANNEL_1);
     
+    
+    Joystick_Init(&joystick_yaw, TIM2);
+    Joystick_Init(&joystick_pitch, TIM3);
+    Joystick_Init(&joystick_roll, TIM4);
+    Joystick_Init(&joystick_thrust, TIM5);
+    Joystick_Init(&joystick_lswitch, TIM9);
+    Joystick_Init(&joystick_rswitch, TIM12);
     /* USER CODE END 2 */
     
     /* USER CODE BEGIN RTOS_MUTEX */
@@ -403,9 +398,19 @@ void QuadcopterStartTask(void const * argument)
             osMailFree(myMailAltToQuadHandle, altitude_ptr);
         }
         
-        // Read joystick
-        //joy_count = __HAL_TIM_GET_COUNTER(&htim1); //TIM_CHANNEL_2);
-        //joy_capture = __HAL_TIM_GET_COMPARE(&htim1, TIM_CHANNEL_2);
+        // Read joystick and map according to PID (-1, 1) from micro seconds (1000, 2000)
+        float YawSetpoint = mapf(Joystick_ReadDuty(&joystick_yaw), 1000, 2000, -1.0f, 1.0f);
+        /*float setpoint_pitch = mapf(Joystick_ReadDuty(&joystick_pitch), 1000, 2000, -1.0f, 1.0f);
+        float setpoint_roll = mapf(Joystick_ReadDuty(&joystick_roll), 1000, 2000, -1.0f, 1.0f);
+        float setpoint_thrust = mapf(Joystick_ReadDuty(&joystick_thrust), 1000, 2000, -1.0f, 1.0f);
+        float setpoint_lswitch = mapf(Joystick_ReadDuty(&joystick_lswitch), 1000, 2000, -1.0f, 1.0f);
+        float setpoint_rswitch = mapf(Joystick_ReadDuty(&joystick_rswitch), 1000, 2000, -1.0f, 1.0f);
+        */
+        //PID_Calc(
+        // Build PID objects
+        
+        
+        
         HAL_GPIO_WritePin(GPIOB, GPIO_PIN_15, GPIO_PIN_RESET);
     }
     /* USER CODE END QuadcopterStartTask */
@@ -439,10 +444,13 @@ void TelemetryStartTask(void const * argument)
         //UART_Print(" a3: %.4f", a3);
         
         // Read joystick
-        //joy_count = __HAL_TIM_GET_COUNTER(&htim1);
+        UART_Print(" tim2: %d", Joystick_ReadDuty(&joystick_yaw));
+        UART_Print(" tim3: %d", Joystick_ReadDuty(&joystick_pitch));
+        UART_Print(" tim4: %d", Joystick_ReadDuty(&joystick_roll));
+        UART_Print(" tim5: %d", Joystick_ReadDuty(&joystick_thrust));
+        UART_Print(" tim9: %d", Joystick_ReadDuty(&joystick_lswitch));
+        UART_Print(" tim12: %d", Joystick_ReadDuty(&joystick_rswitch));
         
-        UART_Print(" pwm: %d", uwDutyCycle2);
-        UART_Print(" freq: %d", uwFrequency2);
         UART_Print("\n\r");
     }
     /* USER CODE END TelemetryStartTask */

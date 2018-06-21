@@ -12,7 +12,7 @@
 #define ESC_INIT_LOW 0
 #define ESC_INIT_HIGH 850
 
-#define TIM_PRESCALER 7
+#define TIM_PRESCALER 12
 
 
 //static uint32_t pwm_min, pwm_max;

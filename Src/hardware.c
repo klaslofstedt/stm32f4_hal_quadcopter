@@ -109,9 +109,9 @@ void MX_TIM1_Init(void)
     TIM_BreakDeadTimeConfigTypeDef sBreakDeadTimeConfig;
     
     htim1.Instance = TIM1;
-    htim1.Init.Prescaler = 6;
+    htim1.Init.Prescaler = 12 - 1;
     htim1.Init.CounterMode = TIM_COUNTERMODE_UP;
-    htim1.Init.Period = 59999;
+    htim1.Init.Period = 55999; // ((168000000 / (250*12)) - 1)
     htim1.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
     htim1.Init.RepetitionCounter = 0;
     if (HAL_TIM_Base_Init(&htim1) != HAL_OK)

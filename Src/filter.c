@@ -4,6 +4,15 @@
 #define M_PI 3.14159265358979
 #endif
 
+float mapf(float val, float in_min, float in_max, float out_min, float out_max) {
+    return (val - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
+}
+
+uint32_t map(uint32_t val, uint32_t in_min, uint32_t in_max, uint32_t out_min, uint32_t out_max)
+{
+    return (val - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
+}
+
 void filter_average(filter_average_t *temp)
 {
     if(temp->counter <= temp->sample_start){
@@ -26,7 +35,7 @@ void filter_lowpass(filter_lowpass_t *temp)
 {
     const float tau = 1.0f/(2.0f*M_PI*temp->cf); // Time constant
     const float alpha = temp->dt/(tau + temp->dt); // See (10) in http://techteach.no/simview/lowpass_filter/doc/filter_algorithm.pdf
-
+    
     // y(n) = y(n-1) + alpha*(u(n) - y(n-1))
     temp->output = temp->output_last + alpha*(temp->input - temp->output_last);
     temp->output_last = temp->output;

@@ -19,6 +19,6 @@ typedef struct{
 	float output;
 }pid_data_t;
 
-void pid_calc(pid_data_t* pid, unsigned long dt);
+void PID_Calc(pid_data_t* pid, unsigned long dt);
 
 #endif
