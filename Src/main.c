@@ -125,8 +125,15 @@ osMailQId myMailAltToQuadHandle;
 osMailQDef(myMailVL53L0XToAltHandle, 1, Vl53l0xRange_t);
 osMailQId myMailVL53L0XToAltHandle;
 
-// PID objcts
+// Joystick objects
+Joystick_t yawJoystick;
+Joystick_t pitchJoystick;
+Joystick_t rollJoystick;
+Joystick_t thrustJoystick;
+Joystick_t switchlJoystick;
+Joystick_t switchrJoystick;
 
+// PID objects
 PID_t yawPid = {
     .boundary_max = 1.0f,
     .boundary_min = -1.0f,
@@ -162,14 +169,9 @@ PID_t altitudePid = {
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
-void EM7180StartTask(void const * argument);
-void AltitudeStartTask(void const * argument);
-void QuadcopterStartTask(void const * argument);
-void TelemetryStartTask(void const * argument);
-void MS5803StartTask(void const * argument);
-void TelemetryStartTask2(void const * argument);
-void VL53L0XStartTask(void const * argument);
 
+static void QuadcopterStartTask(void const * argument);
+static void TelemetryStartTask(void const * argument);
 
 /* USER CODE BEGIN PFP */
 /* Private function prototypes -----------------------------------------------*/
@@ -178,12 +180,6 @@ void VL53L0XStartTask(void const * argument);
 
 /* USER CODE BEGIN 0 */
 
-Joystick_t yawJoystick;
-Joystick_t pitchJoystick;
-Joystick_t rollJoystick;
-Joystick_t thrustJoystick;
-Joystick_t switchlJoystick;
-Joystick_t switchrJoystick;
 /* USER CODE END 0 */
 
 /**
@@ -254,6 +250,10 @@ int main(void)
     ESC_Init(TIM_CHANNEL_2);
     //ESC_Init(TIM_CHANNEL_3);
     //ESC_Init(TIM_CHANNEL_4);
+    
+    // TODO: Remove these :)
+    ESC_SetSpeed(TIM_CHANNEL_1, 1.0f);
+    ESC_SetSpeed(TIM_CHANNEL_2, 0.0f);
     
     // Initialize joystick
     Joystick_Init(&yawJoystick, TIM2);
@@ -398,19 +398,21 @@ uint32_t attitudeDt, altitudeDt;
 void QuadcopterStartTask(void const * argument)
 {
     /* USER CODE BEGIN QuadcopterStartTask */
-    ESC_SetSpeed(TIM_CHANNEL_1, 1.0f);
-    ESC_SetSpeed(TIM_CHANNEL_2, 0.0f);
     
+    // Allocate space for queued attitude struct
     Em7180Attitude_t *pEm7180Attitude;
     osEvent EM7180Event;
-    
+    // Allocate space for queued altitude struct
     Altitude_t *pAltitude;
     osEvent AltitudeEvent;
+    
     /* Infinite loop */
     while(1){
         // Wait on attitude data from em7180 task (250 Hz)
         EM7180Event = osMailGet(myMailEM7180ToQuadHandle, osWaitForever);
-        HAL_GPIO_WritePin(GPIOB, GPIO_PIN_15, GPIO_PIN_SET);
+        // Turn on LED
+        //HAL_GPIO_WritePin(GPIOB, GPIO_PIN_15, GPIO_PIN_SET);
+        // Evaluate event status
         if (EM7180Event.status == osEventMail) {
             pEm7180Attitude = EM7180Event.value.p;
             // Get angle (degrees)
@@ -429,7 +431,6 @@ void QuadcopterStartTask(void const * argument)
         
         // Poll altitude data from altitude task (50 Hz)
         AltitudeEvent = osMailGet(myMailAltToQuadHandle, 0);
-        //HAL_GPIO_WritePin(GPIOB, GPIO_PIN_15, GPIO_PIN_SET);
         if (AltitudeEvent.status == osEventMail) {
             pAltitude = AltitudeEvent.value.p;
             // Get the altitude (cm)
@@ -479,7 +480,8 @@ void QuadcopterStartTask(void const * argument)
         ESC_SetSpeed(TIM_CHANNEL_3, esc3);
         ESC_SetSpeed(TIM_CHANNEL_4, esc4);
 
-        HAL_GPIO_WritePin(GPIOB, GPIO_PIN_15, GPIO_PIN_RESET);
+        // Turn off LED
+        //HAL_GPIO_WritePin(GPIOB, GPIO_PIN_15, GPIO_PIN_RESET);
     }
     /* USER CODE END QuadcopterStartTask */
 }
