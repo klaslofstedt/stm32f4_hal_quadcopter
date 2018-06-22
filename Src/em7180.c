@@ -116,7 +116,7 @@ along with EM7180.  If not, see <http://www.gnu.org/licenses/>.
 
 // Are these static for the EM7180?
 #define ACC_SCALE   2048
-#define GYRO_SCALE  65536
+#define GYRO_SCALE  6.5536f
 
 // Input Semaphore
 extern osSemaphoreId myBinarySemEM7180InterruptHandle;
@@ -143,11 +143,6 @@ static uint8_t ReadByte(uint8_t address, uint8_t subAddress);
 static void WriteByte(uint8_t address, uint8_t subAddress, uint8_t data);
 static void ReadThreeAxis(uint8_t xreg, int16_t *x, int16_t *y, int16_t *z);
 
-
-void delay(uint32_t milliseconds)
-{
-    osDelay(milliseconds);
-}
 
 
 void WriteByte(uint8_t address, uint8_t subAddress, uint8_t data)
@@ -307,7 +302,7 @@ bool EM7180_EEPROM(void)
             break;
         }
         WriteByte(EM7180_ADDRESS, EM7180_ResetRequest, 0x01);
-        delay(500);  
+        osDelay(500);  
     }
     
     
@@ -481,7 +476,7 @@ bool EM7180_Init()
     
     // Enable EM7180 run mode
     WriteByte(EM7180_ADDRESS, EM7180_HostControl, 0x01); // set SENtral in normal run mode
-    delay(100);
+    osDelay(100);
     
     // Disable stillness mode
     SetIntegerParam (0x49, 0x00);
@@ -697,12 +692,12 @@ void EM7180StartTask(void const * argument)
    
 	while(1){
         osSemaphoreWait(myBinarySemEM7180InterruptHandle, osWaitForever);
-        //HAL_GPIO_WritePin(GPIOB, GPIO_PIN_13, GPIO_PIN_SET);
+        HAL_GPIO_WritePin(GPIOC, GPIO_PIN_2, GPIO_PIN_SET);
         
-        Em7180Attitude_t *pEm7180Attitude;
+        static Em7180Attitude_t *pEm7180Attitude;
         pEm7180Attitude = osMailAlloc(myMailEM7180ToQuadHandle, osWaitForever);
         
-        Em7180Altitude_t *pEm7180Altitude;
+        static Em7180Altitude_t *pEm7180Altitude;
         pEm7180Altitude = osMailAlloc(myMailEM7180ToAltHandle, osWaitForever);
         
         EM7180_CheckEventStatus();
@@ -798,6 +793,6 @@ void EM7180StartTask(void const * argument)
         // Send altitude data by mail to altitude task 250 Hz
         osMailPut(myMailEM7180ToAltHandle, pEm7180Altitude);
         
-        //HAL_GPIO_WritePin(GPIOB, GPIO_PIN_13, GPIO_PIN_RESET);
+        HAL_GPIO_WritePin(GPIOC, GPIO_PIN_2, GPIO_PIN_RESET);
 	}
 }

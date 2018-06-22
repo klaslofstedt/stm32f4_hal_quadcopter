@@ -12,7 +12,7 @@ typedef struct{
     float setpoint;
     float boundary_max;
     float boundary_min;
-    uint32_t dt;
+    float dt;
     // Temp variables not to be set
     float last_input;
     float rate;

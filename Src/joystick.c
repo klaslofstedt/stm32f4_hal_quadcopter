@@ -2,6 +2,7 @@
 // Interrupts
 #include "stm32f4xx_it.h"
 #include "filter.h"
+#include "functions.h"
 
 #define JOYSTICK_READ_MIN       1000
 #define JOYSTICK_READ_MAX       2000

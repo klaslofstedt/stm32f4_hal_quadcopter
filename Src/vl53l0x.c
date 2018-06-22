@@ -166,17 +166,18 @@ VL53L0X_Error rangingTest(VL53L0X_RangingMeasurementData_t* pRangingMeasurementD
 
 void VL53L0XStartTask(void const * argument)
 {    
-    uint16_t vl53l0x_range_mm;
+    uint16_t vl53l0xRange;
     uint32_t wakeTime = osKernelSysTick();
     uint32_t lastTime = 0;
 
-    Vl53l0xRange_t *pVl53l0xRange;
+    static Vl53l0xRange_t *pVl53l0xRange;
     pVl53l0xRange = osMailAlloc(myMailVL53L0XToAltHandle, osWaitForever);
     
     // TODO: change to 50 (while not printing over uart)
 	while(1){
         osDelayUntil(&wakeTime, 100);
-        HAL_GPIO_WritePin(GPIOB, GPIO_PIN_13, GPIO_PIN_SET);
+        // Turn on LED
+        HAL_GPIO_WritePin(GPIOC, GPIO_PIN_4, GPIO_PIN_SET);
         
         wakeTime = osKernelSysTick();
         uint32_t dt = wakeTime - lastTime;
@@ -185,21 +186,22 @@ void VL53L0XStartTask(void const * argument)
         rangingTest(&vl53l0x_measurement);
         if (vl53l0x_measurement.RangeStatus != 4) {  // phase failures have incorrect data
             //printf2("Distance (mm): %d\n\r", vl53l0x_measurement.RangeMilliMeter);
-            vl53l0x_range_mm = vl53l0x_measurement.RangeMilliMeter;
+            vl53l0xRange = vl53l0x_measurement.RangeMilliMeter;
             //in->range_cm = (float)in->range_mm / 10;
         } else {
             //printf2(" out of range ");
             //in->range_cm = -1;
-            vl53l0x_range_mm = -1;
+            vl53l0xRange = -1;
         }
         // Calculate dt
-        //UART_Print(" %.4f", (float)vl53l0x_range_mm/10);
-        //UART_Print(" %d", vl53l0x_range_mm);
+        //UART_Print(" %.4f", (float)vl53l0xRange/10);
+        //UART_Print(" %d", vl53l0xRange);
         // Assign pointer and convert from mm to cm
-        pVl53l0xRange->range = (float)vl53l0x_range_mm/10;
+        pVl53l0xRange->range = (float)vl53l0xRange/10;
         pVl53l0xRange->dt = (float)dt * 0.001;
         // Send data by mail to altitude task
         osMailPut(myMailVL53L0XToAltHandle, pVl53l0xRange);
-        HAL_GPIO_WritePin(GPIOB, GPIO_PIN_13, GPIO_PIN_RESET);
+        // Turn of LED
+        HAL_GPIO_WritePin(GPIOC, GPIO_PIN_4, GPIO_PIN_RESET);
     }
 }

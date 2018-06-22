@@ -226,13 +226,13 @@ void MS5803StartTask(void const * argument)
     uint32_t wakeTime = osKernelSysTick();
     uint32_t lastTime = 0;
     
-    Ms5803Altitude_t *pMs5803Altitude;
+    static Ms5803Altitude_t *pMs5803Altitude;
     pMs5803Altitude = osMailAlloc(myMailMS5803ToAltHandle, osWaitForever);
     
     
 	while(1){
         osDelayUntil(&wakeTime, 20);
-        HAL_GPIO_WritePin(GPIOB, GPIO_PIN_14, GPIO_PIN_SET);
+        HAL_GPIO_WritePin(GPIOC, GPIO_PIN_5, GPIO_PIN_SET);
         
         wakeTime = osKernelSysTick();
         uint32_t dt = wakeTime - lastTime;
@@ -250,7 +250,7 @@ void MS5803StartTask(void const * argument)
         pMs5803Altitude->dt = (float)dt * 0.001;
         // Send data by mail to altitude task
         osMailPut(myMailMS5803ToAltHandle, pMs5803Altitude);
-        HAL_GPIO_WritePin(GPIOB, GPIO_PIN_14, GPIO_PIN_RESET);
+        HAL_GPIO_WritePin(GPIOC, GPIO_PIN_5, GPIO_PIN_RESET);
     }
 }
 

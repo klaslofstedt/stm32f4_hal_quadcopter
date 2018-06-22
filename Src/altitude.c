@@ -157,13 +157,13 @@ static float accVel = 0;
 void AltitudeStartTask(void const * argument)
 {    
     // Mail from EM7180 task
-    Em7180Altitude_t *em7180_alt_ptr; //pEm7180Alt
+    static Em7180Altitude_t *pEm7180Attitude; //pEm7180Alt
     osEvent EM7180Event;
     // Mail from MS5803 task
-    Ms5803Altitude_t *ms5803_alt_ptr;
+    static Ms5803Altitude_t *pMs5803Altitude;
     osEvent MS5803Event;
     // Mail from VL53l0X task
-    Vl53l0xRange_t *vl53l0x_range_ptr;
+    static Vl53l0xRange_t *pVl53l0xRange;
     osEvent VL53L0XEvent;
     // Mail to quadcopter task
     Altitude_t *alt_quad_ptr;
@@ -172,38 +172,40 @@ void AltitudeStartTask(void const * argument)
 	while(1){
         // Wait forever for acc & baro data from the em7180 task
         EM7180Event = osMailGet(myMailEM7180ToAltHandle, osWaitForever);
-        //HAL_GPIO_WritePin(GPIOB, GPIO_PIN_12, GPIO_PIN_SET);
+        // Turn on LED
+        HAL_GPIO_WritePin(GPIOC, GPIO_PIN_3, GPIO_PIN_SET);
+        
         if (EM7180Event.status == osEventMail) {
-            em7180_alt_ptr = EM7180Event.value.p;
+            pEm7180Attitude = EM7180Event.value.p;
             
-            baro1Raw = em7180_alt_ptr->altitude;
-            accRaw = em7180_alt_ptr->acc_z;
-            accDt = em7180_alt_ptr->dt;
-            baro1Dt = em7180_alt_ptr->dt_baro;
+            baro1Raw = pEm7180Attitude->altitude;
+            accRaw = pEm7180Attitude->acc_z;
+            accDt = pEm7180Attitude->dt;
+            baro1Dt = pEm7180Attitude->dt_baro;
             
-            osMailFree(myMailEM7180ToAltHandle, em7180_alt_ptr);
+            osMailFree(myMailEM7180ToAltHandle, pEm7180Attitude);
         }
         // Poll data from baro data from the ms5803 task
         MS5803Event = osMailGet(myMailMS5803ToAltHandle, 0);
         if (MS5803Event.status == osEventMail) {
-            ms5803_alt_ptr = MS5803Event.value.p;
+            pMs5803Altitude = MS5803Event.value.p;
             
-            baroRaw = ms5803_alt_ptr->altitude;
-            baro2Dt = ms5803_alt_ptr->dt;
+            baroRaw = pMs5803Altitude->altitude;
+            baro2Dt = pMs5803Altitude->dt;
             
-            osMailFree(myMailMS5803ToAltHandle, ms5803_alt_ptr);
+            osMailFree(myMailMS5803ToAltHandle, pMs5803Altitude);
         }
         // Poll data from range data from the vl53l0x task
         VL53L0XEvent = osMailGet(myMailVL53L0XToAltHandle, 0);
         if (VL53L0XEvent.status == osEventMail) {
-            HAL_GPIO_WritePin(GPIOB, GPIO_PIN_12, GPIO_PIN_SET);
-            vl53l0x_range_ptr = VL53L0XEvent.value.p;
+            //HAL_GPIO_WritePin(GPIOC, GPIO_PIN_3, GPIO_PIN_SET);
+            pVl53l0xRange = VL53L0XEvent.value.p;
             
-            rangeRaw = vl53l0x_range_ptr->range;
-            rangeDt = vl53l0x_range_ptr->dt;
+            rangeRaw = pVl53l0xRange->range;
+            rangeDt = pVl53l0xRange->dt;
             
-            osMailFree(myMailVL53L0XToAltHandle, vl53l0x_range_ptr);
-            HAL_GPIO_WritePin(GPIOB, GPIO_PIN_12, GPIO_PIN_RESET);
+            osMailFree(myMailVL53L0XToAltHandle, pVl53l0xRange);
+            //HAL_GPIO_WritePin(GPIOC, GPIO_PIN_3, GPIO_PIN_RESET);
         }
         
         // Calculate accelerometer offset on the z-axis
@@ -241,11 +243,11 @@ void AltitudeStartTask(void const * argument)
             
             if(readyy == 0){
                 //UART_Print("=========================");
-                UART_Print(" ao: %.4f\n\r", accOffset);
-                UART_Print(" bo: %.4f", baro1Offset);
-                UART_Print(" bo: %.4f", baro2Offset);
-                UART_Print(" ro: %.4f", rangeOffset);
-                UART_Print("\n\r");
+                //UART_Print(" ao: %.4f\n\r", accOffset);
+                //UART_Print(" bo: %.4f", baro1Offset);
+                //UART_Print(" bo: %.4f", baro2Offset);
+                //UART_Print(" ro: %.4f", rangeOffset);
+                //UART_Print("\n\r");
                 //UART_Print(" baro1Dt: %.8f", baro1Dt);
                 //UART_Print(" accDt: %.8f\n\r", accDt);
                 readyy = 1;
@@ -369,7 +371,7 @@ void AltitudeStartTask(void const * argument)
         osMailFree(myMailMS5803ToAltHandle, ms5803_ptr);
     }*/
         
-        //HAL_GPIO_WritePin(GPIOB, GPIO_PIN_12, GPIO_PIN_RESET);
+        HAL_GPIO_WritePin(GPIOC, GPIO_PIN_3, GPIO_PIN_RESET);
     }
 }
 

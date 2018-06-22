@@ -22,8 +22,6 @@ typedef struct{
     float dt;
 } FilterLowpass_t; // filterLowpass_t
 
-float mapf(float val, float in_min, float in_max, float out_min, float out_max);
-uint32_t map(uint32_t val, uint32_t in_min, uint32_t in_max, uint32_t out_min, uint32_t out_max);
 
 void Filter_Average(FilterAverage_t *filter); // Filter_Average(filterAverage_t *avg)
 void Filter_Lowpass(FilterLowpass_t *filter); // Filter_Lowpass(filtlerLowpass_t *lp)

@@ -246,14 +246,14 @@ int main(void)
     HAL_TIM_IC_Start_IT(&htim12, TIM_CHANNEL_1);
     
     // Initialize ESCs
-    ESC_Init(TIM_CHANNEL_1);
-    ESC_Init(TIM_CHANNEL_2);
+    //ESC_Init(TIM_CHANNEL_1);
+    //ESC_Init(TIM_CHANNEL_2);
     //ESC_Init(TIM_CHANNEL_3);
     //ESC_Init(TIM_CHANNEL_4);
     
     // TODO: Remove these :)
-    ESC_SetSpeed(TIM_CHANNEL_1, 1.0f);
-    ESC_SetSpeed(TIM_CHANNEL_2, 0.0f);
+    //ESC_SetSpeed(TIM_CHANNEL_1, 1.0f);
+    //ESC_SetSpeed(TIM_CHANNEL_2, 0.0f);
     
     // Initialize joystick
     Joystick_Init(&yawJoystick, TIM2);
@@ -284,7 +284,7 @@ int main(void)
     }else{ // Print error message
         UART_Print(MS5803_GetErrorString());
     }
-
+    
     /* USER CODE END 2 */
     
     /* USER CODE BEGIN RTOS_MUTEX */
@@ -323,7 +323,7 @@ int main(void)
     
     /* definition and creation of MS5803Task */
     osThreadDef(MS5803Task, MS5803StartTask, osPriorityNormal, 0, 256);
-    MS5803TaskHandle = osThreadCreate(osThread(MS5803Task), NULL);
+    //MS5803TaskHandle = osThreadCreate(osThread(MS5803Task), NULL);
     
     /* definition and creation of TelemetryTask2 */
     osThreadDef(TelemetryTask2, TelemetryStartTask2, osPriorityBelowNormal, 0, 256);
@@ -373,24 +373,18 @@ int main(void)
 
 // GPIO_PIN_12 altitude
 // GPIO_PIN_13 em7180
-// GPIO_PIN_14  ms5803
+// GPIO_PIN_14 ms5803
 // GPIO_PIN_15 quadcopter
 
 // PA2 - bluetooth rx
 // PA3 - bluetooth tx
 
-//float qw, qx, qy, qz;
-// Acceleration in m/s^2 adjusted without gravity
-//float acc_x, acc_y, acc_z;
-// Gyro in m/s (drift free from EM7180?)
-//float gyro_x, gyro_y, gyro_z;
-// Angles in degrees
-
 float yawAngle, pitchAngle, rollAngle;
 float yawRate, pitchRate, rollRate;
 float altitude, altitudeVelocity;
-uint32_t attitudeDt, altitudeDt;
-//static float joystick_lx, joystick_ly, joystick_rx, joystick_ry;
+float attitudeDt, altitudeDt;
+
+float esc1, esc2, esc3, esc4;
 
 /* USER CODE END 4 */
 
@@ -400,10 +394,10 @@ void QuadcopterStartTask(void const * argument)
     /* USER CODE BEGIN QuadcopterStartTask */
     
     // Allocate space for queued attitude struct
-    Em7180Attitude_t *pEm7180Attitude;
+    static Em7180Attitude_t *pEm7180Attitude;
     osEvent EM7180Event;
     // Allocate space for queued altitude struct
-    Altitude_t *pAltitude;
+    static Altitude_t *pAltitude;
     osEvent AltitudeEvent;
     
     /* Infinite loop */
@@ -411,7 +405,7 @@ void QuadcopterStartTask(void const * argument)
         // Wait on attitude data from em7180 task (250 Hz)
         EM7180Event = osMailGet(myMailEM7180ToQuadHandle, osWaitForever);
         // Turn on LED
-        //HAL_GPIO_WritePin(GPIOB, GPIO_PIN_15, GPIO_PIN_SET);
+        HAL_GPIO_WritePin(GPIOC, GPIO_PIN_1, GPIO_PIN_SET);
         // Evaluate event status
         if (EM7180Event.status == osEventMail) {
             pEm7180Attitude = EM7180Event.value.p;
@@ -419,11 +413,11 @@ void QuadcopterStartTask(void const * argument)
             yawAngle    = pEm7180Attitude->angle.yaw;
             pitchAngle  = pEm7180Attitude->angle.pitch;
             rollAngle   = pEm7180Attitude->angle.roll;
-            // Get angular rate (degrees/s?) 
+            // Get angular rate (degrees/s) 
             yawRate     = pEm7180Attitude->gyro.z;
             pitchRate   = pEm7180Attitude->gyro.y;
             rollRate    = pEm7180Attitude->gyro.x;
-            // Get dt timestamp (milliseconds?)
+            // Get dt timestamp (seconds)
             attitudeDt  = pEm7180Attitude->dt;
             // Free the allocated struct memory
             osMailFree(myMailEM7180ToQuadHandle, pEm7180Attitude);
@@ -437,24 +431,24 @@ void QuadcopterStartTask(void const * argument)
             altitude = pAltitude->altitude;
             // Get the altitudal velocity (cm/s?)
             altitudeVelocity = pAltitude->velocity;
-            // Get dt timestamp (milliseconds?)
-            altitudeDt  = pAltitude->dt;
+            // Get dt timestamp (seconds)
+            altitudeDt  = (uint32_t)pAltitude->dt;
             // Free the allocated struct memory
             osMailFree(myMailAltToQuadHandle, pAltitude);
         }
         
         // Build yaw PID object
-        yawPid.setpoint = Joystick_ReadDuty(&yawJoystick);
+        yawPid.setpoint = 0;//Joystick_ReadDuty(&yawJoystick);
         yawPid.input    = yawAngle;
         yawPid.rate     = yawRate;
         yawPid.dt       = attitudeDt;
         // Build pitch PID object
-        pitchPid.setpoint = Joystick_ReadDuty(&pitchJoystick);
+        pitchPid.setpoint = 0;//Joystick_ReadDuty(&pitchJoystick);
         pitchPid.input    = pitchAngle;
         pitchPid.rate     = pitchRate;
         pitchPid.dt       = attitudeDt;
         // Build roll PID object
-        rollPid.setpoint = Joystick_ReadDuty(&rollJoystick);
+        rollPid.setpoint = 0;//Joystick_ReadDuty(&rollJoystick);
         rollPid.input    = rollAngle;
         rollPid.rate     = rollRate;
         rollPid.dt       = attitudeDt;
@@ -470,18 +464,21 @@ void QuadcopterStartTask(void const * argument)
         PID_Calc(&rollPid);
         PID_Calc(&altitudePid);
         // Calculate the motor values
-        float esc1 = HOVER_THRUST + altitudePid.output + rollPid.output + pitchPid.output + yawPid.output;
-        float esc2 = HOVER_THRUST + altitudePid.output + rollPid.output - pitchPid.output - yawPid.output;
-        float esc3 = HOVER_THRUST + altitudePid.output - rollPid.output - pitchPid.output + yawPid.output;
-        float esc4 = HOVER_THRUST + altitudePid.output - rollPid.output + pitchPid.output - yawPid.output;
-        // Set motor speed
+        esc1 = /*HOVER_THRUST + altitudePid.output +*/ rollPid.output + pitchPid.output /*+ yawPid.output*/;
+        esc2 = /*HOVER_THRUST + altitudePid.output +*/ rollPid.output - pitchPid.output /*- yawPid.output*/;
+        esc3 = /*HOVER_THRUST + altitudePid.output */- rollPid.output - pitchPid.output /*+ yawPid.output*/;
+        esc4 = /*HOVER_THRUST + altitudePid.output */- rollPid.output + pitchPid.output /*- yawPid.output*/;
+        
+        // 1  front  4
+        // left  right
+        // 2  back   3
         ESC_SetSpeed(TIM_CHANNEL_1, esc1);
         ESC_SetSpeed(TIM_CHANNEL_2, esc2);
         ESC_SetSpeed(TIM_CHANNEL_3, esc3);
         ESC_SetSpeed(TIM_CHANNEL_4, esc4);
-
+        
         // Turn off LED
-        //HAL_GPIO_WritePin(GPIOB, GPIO_PIN_15, GPIO_PIN_RESET);
+        HAL_GPIO_WritePin(GPIOC, GPIO_PIN_1, GPIO_PIN_RESET);
     }
     /* USER CODE END QuadcopterStartTask */
 }
@@ -491,37 +488,56 @@ void TelemetryStartTask(void const * argument)
 {
     /* USER CODE BEGIN TelemetryStartTask */
     /* Infinite loop */
-    
+    float totDt = 0;
+    uint32_t counter = 0;
     while(1){
-        osDelay(200); // TODO: osDelayUntil
-        
-        //UART_Print(" range %d", range_mm);
-        //UART_Print("Total %d", xPortGetMinimumEverFreeHeapSize());
-        //UART_Print(" gx: %.4f", gyro_x);
-        //UART_Print(" gy: %.4f", gyro_y);
-        //UART_Print(" gz: %.4f", gyro_z);
-        
-        UART_Print(" y: %.4f", yawAngle);
-        UART_Print(" p: %.4f", pitchAngle);
-        UART_Print(" r: %.4f", rollAngle);
-        UART_Print(" a: %.4f", altitude);
-        
-        //input_pwm_ch1 = TIM1->CCR1;
-        //input_pwm_ch2 = TIM1->CCR2;
-        //input_pwm = (float)(100 * (input_pwm_ch2 / input_pwm_ch1));
-        //UART_Print(" a1: %.4f", a1);
-        //UART_Print(" a2: %.4f", a2);
-        //UART_Print(" a3: %.4f", a3);
-        
-        // Read joystick
-        UART_Print(" tim2: %.4f", Joystick_ReadDuty(&yawJoystick));
-        UART_Print(" tim3: %.4f", Joystick_ReadDuty(&pitchJoystick));
-        UART_Print(" tim4: %.4f", Joystick_ReadDuty(&rollJoystick));
-        UART_Print(" tim5: %.4f", Joystick_ReadDuty(&thrustJoystick));
-        UART_Print(" tim9: %.4f", Joystick_ReadDuty(&switchlJoystick));
-        UART_Print(" tim12: %.4f", Joystick_ReadDuty(&switchrJoystick));
-        
-        UART_Print("\n\r");
+        osDelay(50); // TODO: osDelayUntil
+        if(counter < 20000){
+            totDt += pitchPid.dt;
+            counter++;
+            //UART_Print(" range %d", range_mm);
+            //UART_Print("Total %d", xPortGetMinimumEverFreeHeapSize());
+            //UART_Print(" gx: %.4f", gyro_x);
+            //UART_Print(" gy: %.4f", gyro_y);
+            //UART_Print(" gz: %.4f", gyro_z);
+            
+            //UART_Print(" y: %.4f", yawAngle);
+            //UART_Print(" p: %.4f", pitchAngle);
+            //UART_Print(" r: %.4f", rollAngle);
+            //UART_Print(" a: %.4f", altitude);
+            
+            //UART_Print(" %.4f", totDt);
+            //UART_Print(" %.4f", pitchAngle);
+            //UART_Print(" %.8f", pitchRate);
+            //UART_Print(" %.4f", pitchPid.rate_calc);
+            
+            UART_Print(" rollP %.4f", rollPid.output);
+            UART_Print(" pitchP %.4f", pitchPid.output);
+            UART_Print(" yawP %.8f", yawPid.output);
+            UART_Print(" altP %.4f", altitudePid.output);
+            
+            UART_Print(" esc1 %.4f", esc1);
+            UART_Print(" esc2 %.4f", esc2);
+            UART_Print(" esc3 %.4f", esc3);
+            UART_Print(" esc4 %.4f", esc4);
+            
+            //input_pwm_ch1 = TIM1->CCR1;
+            //input_pwm_ch2 = TIM1->CCR2;
+            //input_pwm = (float)(100 * (input_pwm_ch2 / input_pwm_ch1));
+            //UART_Print(" a1: %.4f", a1);
+            //UART_Print(" a2: %.4f", a2);
+            //UART_Print(" a3: %.4f", a3);
+            
+            // Read joystick
+            //UART_Print(" tim2: %.4f", Joystick_ReadDuty(&yawJoystick));
+            //UART_Print(" tim3: %.4f", Joystick_ReadDuty(&pitchJoystick));
+            //UART_Print(" tim4: %.4f", Joystick_ReadDuty(&rollJoystick));
+            //UART_Print(" tim5: %.4f", Joystick_ReadDuty(&thrustJoystick));
+            //UART_Print(" tim9: %.4f", Joystick_ReadDuty(&switchlJoystick));
+            //UART_Print(" tim12: %.4f", Joystick_ReadDuty(&switchrJoystick));
+            
+            UART_Print("\n\r");
+        }
     }
     /* USER CODE END TelemetryStartTask */
 }
