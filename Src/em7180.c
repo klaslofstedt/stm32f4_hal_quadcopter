@@ -676,6 +676,8 @@ void EM7180StartTask(void const * argument)
     float qw, qx, qy, qz;
     // Acceleration in cm/s^2 adjusted without gravity
     float acc_x, acc_y, acc_z;
+    // Acc angle
+    //float ang_x, ang_y, ang_z;
     // Gyro in m/s(?) (drift free from EM7180?)
     float gyro_x, gyro_y, gyro_z;
     // Angles in degrees
@@ -692,7 +694,7 @@ void EM7180StartTask(void const * argument)
    
 	while(1){
         osSemaphoreWait(myBinarySemEM7180InterruptHandle, osWaitForever);
-        HAL_GPIO_WritePin(GPIOC, GPIO_PIN_2, GPIO_PIN_SET);
+        HAL_GPIO_WritePin(GPIOC, GPIO_PIN_0, GPIO_PIN_SET);
         
         static Em7180Attitude_t *pEm7180Attitude;
         pEm7180Attitude = osMailAlloc(myMailEM7180ToQuadHandle, osWaitForever);
@@ -748,6 +750,10 @@ void EM7180StartTask(void const * argument)
             acc_x = (float)ax / ACC_SCALE; 
             acc_y = (float)ay / ACC_SCALE;
             acc_z = (float)az / ACC_SCALE;
+            // TODO: remove these (just to try kalman filter)
+            //ang_x = acc_x * 90;
+            //ang_y = acc_y * 90;
+            //ang_z = acc_z * 90;
             // Calculate the gravitation contribution from quatarions
             a1 = 2.0f * (qx * qz - qw * qy);
             a2 = 2.0f * (qw * qx + qy * qz);
@@ -756,7 +762,7 @@ void EM7180StartTask(void const * argument)
             acc_x -= a1;
             acc_y -= a2;
             acc_z -= a3;
-            // Convert from G's into cm/s^2
+            // Convert from G's into m/s^2 then cm/s^2
             acc_x *= 9.80665f * 100.0f;
             acc_y *= 9.80665f * 100.0f;
             acc_z *= 9.80665f * 100.0f;
@@ -793,6 +799,6 @@ void EM7180StartTask(void const * argument)
         // Send altitude data by mail to altitude task 250 Hz
         osMailPut(myMailEM7180ToAltHandle, pEm7180Altitude);
         
-        HAL_GPIO_WritePin(GPIOC, GPIO_PIN_2, GPIO_PIN_RESET);
+        HAL_GPIO_WritePin(GPIOC, GPIO_PIN_0, GPIO_PIN_RESET);
 	}
 }

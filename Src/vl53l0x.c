@@ -197,7 +197,10 @@ void VL53L0XStartTask(void const * argument)
         //UART_Print(" %.4f", (float)vl53l0xRange/10);
         //UART_Print(" %d", vl53l0xRange);
         // Assign pointer and convert from mm to cm
-        pVl53l0xRange->range = (float)vl53l0xRange/10;
+        
+        if(vl53l0xRange < 2000){ // Return only valid values (<2m)
+            pVl53l0xRange->range = (float)vl53l0xRange/10;
+        }
         pVl53l0xRange->dt = (float)dt * 0.001;
         // Send data by mail to altitude task
         osMailPut(myMailVL53L0XToAltHandle, pVl53l0xRange);

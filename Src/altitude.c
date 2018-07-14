@@ -35,6 +35,33 @@ extern osMailQId myMailVL53L0XToAltHandle;
 // Output mail
 extern osMailQId myMailAltToQuadHandle;
 
+#define TIME_STAMP 0.04
+
+FilterKalman_t angleFilterKalman = {
+    .F[0][0] = 1,
+    .F[0][1] = TIME_STAMP,
+    .F[1][0] = 0,
+    .F[1][1] = 1,
+
+    .B[0] = TIME_STAMP * TIME_STAMP / 2,
+    .B[1] = TIME_STAMP,
+
+    .Q[0] = 0.005,  // Variance for gyro
+    .Q[1] = 0.005,  // Variance for gyro bias
+    .R[0] = 10,   // Variance for accelerometer
+    .R[1] = 10,   // Variance for accelerometer
+
+    .H[0][0] = 1,
+    .H[0][1] = 0,
+    .H[1][0] = 0,
+    .H[1][1] = 1,
+    
+    .P[0][0] = 0,
+    .P[0][1] = 0,
+    .P[1][0] = 0,
+    .P[1][1] = 0
+};
+
 
 FilterAverage_t accFilterAverage = {
     .sample_start = 500,
@@ -173,7 +200,7 @@ void AltitudeStartTask(void const * argument)
         // Wait forever for acc & baro data from the em7180 task
         EM7180Event = osMailGet(myMailEM7180ToAltHandle, osWaitForever);
         // Turn on LED
-        HAL_GPIO_WritePin(GPIOC, GPIO_PIN_3, GPIO_PIN_SET);
+        HAL_GPIO_WritePin(GPIOC, GPIO_PIN_2, GPIO_PIN_SET);
         
         if (EM7180Event.status == osEventMail) {
             pEm7180Attitude = EM7180Event.value.p;
@@ -252,67 +279,18 @@ void AltitudeStartTask(void const * argument)
                 //UART_Print(" accDt: %.8f\n\r", accDt);
                 readyy = 1;
             }
+            
+            // Kalman stuff
             // Low pass filter barometric altitude
             baro1AltFilterLowpass.input = 100 * baro1Altitude;
             baro1AltFilterLowpass.dt = baro1Dt;
             Filter_Lowpass(&baro1AltFilterLowpass);
             baro1AltitudeLpf = baro1AltFilterLowpass.output;
             
-            baro2AltFilterLowpass.input = 100 * baro2Altitude;
-            baro2AltFilterLowpass.dt = baro2Dt;
-            Filter_Lowpass(&baro2AltFilterLowpass);
-            baro2AltitudeLpf = baro2AltFilterLowpass.output;
-            
-            // TODO: This method does not take into consideration that we might 
-            // wanna land somewhere higher/lower than the starting point, so
-            // basically this is a pretty shit method without some sort of 
-            // offset reset, but will do now for hover tests
-            
-            // The vl53l0x doesn't need lowpass-filtering, so let's add upp all
-            // altitude measuring sensors before it's fused together with
-            // accelerometer data
-            baroAltitudeTot = (baro1AltitudeLpf + baro1AltitudeLpf) / 2; // TODO: change one baro1 to working baro2
-            // If vl53l0x is within range but barometer out of range
-            if((rangeAltitude <= MAX_VL53L0X_ALT) && (baroAltitudeTot < MIN_BARO_ALT)){
-                sensorsAltitude = rangeAltitude;
-                sensorsDt = rangeDt;
-            }
-            // If vl53l0x is out of range but barometer within range
-            if((baroAltitudeTot >= MIN_BARO_ALT) && (rangeAltitude > MAX_VL53L0X_ALT)){
-                sensorsAltitude = rangeAltitude;
-                sensorsDt = baro1Dt;
-            }
-            // If vl53l0x and barometer within range, combine them in a 50cm transition
-            if((baroAltitudeTot >= MIN_BARO_ALT) && (rangeAltitude <= MAX_VL53L0X_ALT)){
-                // Calculate a damping value between 0 and 1 (0 - 50 / 50)
-                float damping = (float)((sensorsAltitude - MIN_BARO_ALT) / (MAX_VL53L0X_ALT - MIN_BARO_ALT));
-                // The closer to 0, the bigger the contribution of range, the closer to 1, the bigger the contribution from baro
-                sensorsAltitude = Filter_Transition(rangeAltitude, baroAltitudeTot, damping);
-                sensorsDt = rangeDt;
-            }
-                
             // Derive altitude and get velocity in cm/s
             static float baro1AltitudeLast;
             baro1Velocity = (baro1AltitudeLpf - baro1AltitudeLast) / baro1Dt;
             baro1AltitudeLast = baro1AltitudeLpf;
-            
-            // Derive sensors altitude and get velocity in cm/s
-            // TODO: find a better way to determine sensorsDt, since baro is
-            // sampled in 50Hz and vl53l0x in 25Hz
-            static float sensorsAltitudeLast;
-            sensorsVelocity = (sensorsAltitude - sensorsAltitudeLast) / sensorsDt;
-            sensorsAltitudeLast = sensorsAltitude;
-            
-            sensorsVelFilterLowpass.input = sensorsVelocity;
-            sensorsVelFilterLowpass.dt = sensorsDt;
-            Filter_Lowpass(&sensorsVelFilterLowpass);
-            sensorsVelocityLpf = sensorsVelFilterLowpass.output;
-            
-            // Low pass filter barometric velocity signal
-            baro1VelFilterLowpass.input = baro1Velocity;
-            baro1VelFilterLowpass.dt = baro1Dt;
-            Filter_Lowpass(&baro1VelFilterLowpass);
-            baro1VelocityLpf = baro1VelFilterLowpass.output;
             
             // Low pass filter accelerometer acceleration
             accAccFilterLowpass.input = accAcceleration;
@@ -330,31 +308,16 @@ void AltitudeStartTask(void const * argument)
             accAltitudeLast = accAltitude;
             //--------------------
             
-            // Velocity = initial velocity +  (acceleration * time)
-            tempVelocity = velocity + (accAccelerationLpf * accDt); 
-            // Position = initial position + (initial velocity * time) + (0.5 * acceleration * (time^2))
-            tempAltitude = altitude + (tempVelocity * accDt) + (0.5 * accAccelerationLpf * accDt * accDt);
-            // Calculate velocity using complimentary filter 
-            static float velCoeff = 0.999;
-            velocity = velCoeff * tempVelocity + (1 - velCoeff) * baro1VelocityLpf;
-            // Calculate altitude with complimentary filter
-            static float altCoeff = 0.995;
-            altitude = altCoeff * tempAltitude + (1 - altCoeff) * baro1AltitudeLpf;
+            angleFilterKalman.u = accAcceleration;
+            angleFilterKalman.z[0] = baro1AltitudeLpf;
+            angleFilterKalman.z[1] = baro1Velocity;
             
-            // TODO: This block uses the combined laser and barometer data and can
-            // probably be used instead of the block above as soon as it's
-            // verified :) ---------------------
-            // Velocity = initial velocity +  (acceleration * time)
-            tempVelocity2 = velocity2 + (accAccelerationLpf * accDt); 
-            // Position = initial position + (initial velocity * time) + (0.5 * acceleration * (time^2))
-            tempAltitude2 = altitude2 + (tempVelocity2 * accDt) + (0.5 * accAccelerationLpf * accDt * accDt);
-            // Calculate velocity using complimentary filter 
-            static float vel2Coeff = 0.99;
-            velocity2 = vel2Coeff * tempVelocity2 + (1 - vel2Coeff) * sensorsVelocityLpf;
-            // Calculate altitude with complimentary filter
-            static float alt2Coeff = 0.95;
-            altitude2 = alt2Coeff * tempAltitude2 + (1 - alt2Coeff) * sensorsAltitude;
-            //------------------------------
+            Filter_Kalman(&angleFilterKalman);
+            
+            altitude = angleFilterKalman.x[0];
+            
+            
+            
         }
         // TODO: assign data with laser
         alt_quad_ptr->velocity = velocity;
@@ -371,18 +334,19 @@ void AltitudeStartTask(void const * argument)
         osMailFree(myMailMS5803ToAltHandle, ms5803_ptr);
     }*/
         
-        HAL_GPIO_WritePin(GPIOC, GPIO_PIN_3, GPIO_PIN_RESET);
+        HAL_GPIO_WritePin(GPIOC, GPIO_PIN_2, GPIO_PIN_RESET);
     }
 }
 
 
 static uint32_t counter = 0;
+static uint32_t counter2= 0;
 void TelemetryStartTask2(void const * argument)
 {
-    osDelay(6000);
+    //osDelay(6000);
 	while(1){
         osDelay(40); // TODO: osDelayUntil
-        if(counter < 250){
+        if(counter < 500){
             totDt += accDt;
             counter++;
             //UART_Print("Total %d", xPortGetMinimumEverFreeHeapSize());
@@ -396,10 +360,10 @@ void TelemetryStartTask2(void const * argument)
             //UART_Print(" b2: %.4f", baro2);
             
             //----- Print to plot
-            //UART_Print(" %.4f", totDt);
-            //UART_Print(" %.4f", accAltitude);
-            //UART_Print(" %.4f", 100 * baro1Altitude);
-            //UART_Print(" %.4f", altitude);
+            UART_Print(" %.4f", accDt);
+            UART_Print(" %.4f", accAltitude);
+            UART_Print(" %.4f", 100 * baro1Altitude);
+            UART_Print(" %.4f", altitude);
             //------
             
             //----- Print to plot
@@ -410,10 +374,10 @@ void TelemetryStartTask2(void const * argument)
             //------
             
             //----- Print to plot
-            UART_Print(" %.4f", totDt);
-            UART_Print(" %.4f", accAltitude);
-            UART_Print(" %.4f", rangeAltitude);
-            UART_Print(" %.4f", altitude2);
+            //UART_Print(" %.4f", totDt);
+            //UART_Print(" %.4f", accAltitude);
+            //UART_Print(" %.4f", rangeAltitude);
+            //UART_Print(" %.4f", altitude2);
             //------
             
             //UART_Print(" %.4f", totDt);
@@ -421,12 +385,21 @@ void TelemetryStartTask2(void const * argument)
             
             //UART_Print(" ms5803 %.4f", baro2Altitude);
             
+            //UART_Print(" %.5f,", baro1Altitude);
+            //UART_Print(",");
+            
+            UART_Print("\n\r");
+            
+            counter2++;
             //UART_Print(" bo: %.4f", baro1Offset);
             //UART_Print(" ao: %.4f", acc_z_offset);
             //UART_Print(" dt: %.4f", dt);
             //UART_Print(" alt: %.4f", altitude_data.altitude);
             //UART_Print(" vel: %.4f", altitude_data.velocity);
-            UART_Print("\n\r");
+            /*if(counter2 == 10){
+                UART_Print("\n\r");
+                counter2 = 0;
+            }*/
         }
     }
 }
