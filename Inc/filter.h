@@ -81,6 +81,7 @@ typedef struct{
     float dt;
 } FilterLowpass_t;
 
+float Altitude_KF(float acceleration, float altitude, float dt);
 //float Filter_Kalman(float acc, float gyro, float dt);
 void Filter_Kalman(FilterKalman_t *k);
 void Filter_Average(FilterAverage_t *filter); // Filter_Average(filterAverage_t *avg)

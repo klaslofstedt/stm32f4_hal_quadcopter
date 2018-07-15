@@ -35,7 +35,7 @@ extern osMailQId myMailVL53L0XToAltHandle;
 // Output mail
 extern osMailQId myMailAltToQuadHandle;
 
-#define TIME_STAMP 0.04
+#define TIME_STAMP 0.04f
 
 FilterKalman_t angleFilterKalman = {
     .F[0][0] = 1,
@@ -46,20 +46,21 @@ FilterKalman_t angleFilterKalman = {
     .B[0] = TIME_STAMP * TIME_STAMP / 2,
     .B[1] = TIME_STAMP,
 
-    .Q[0] = 0.005,  // Variance for gyro
-    .Q[1] = 0.005,  // Variance for gyro bias
-    .R[0] = 10,   // Variance for accelerometer
-    .R[1] = 10,   // Variance for accelerometer
+    .Q[0] = 0.001,   // Variance for accel
+    .Q[1] = 0.001,   // Variance for accel
+    .R[0] = 0.1,    // Variance for baro
+    .R[1] = 0.1,    // Variance for baro
 
+    // ????????
     .H[0][0] = 1,
     .H[0][1] = 0,
     .H[1][0] = 0,
-    .H[1][1] = 1,
+    .H[1][1] = 0,
     
-    .P[0][0] = 0,
+    .P[0][0] = 1,
     .P[0][1] = 0,
     .P[1][0] = 0,
-    .P[1][1] = 0
+    .P[1][1] = 1
 };
 
 
@@ -308,13 +309,16 @@ void AltitudeStartTask(void const * argument)
             accAltitudeLast = accAltitude;
             //--------------------
             
-            angleFilterKalman.u = accAcceleration;
+            angleFilterKalman.u = accAccelerationLpf;
             angleFilterKalman.z[0] = baro1AltitudeLpf;
-            angleFilterKalman.z[1] = baro1Velocity;
+            angleFilterKalman.z[1] = 0;//baro1Velocity;
             
             Filter_Kalman(&angleFilterKalman);
             
-            altitude = angleFilterKalman.x[0];
+            altitude2 = angleFilterKalman.x[0];
+            
+            
+            altitude = Altitude_KF(accAccelerationLpf, baro1AltitudeLpf, TIME_STAMP);
             
             
             
@@ -346,9 +350,10 @@ void TelemetryStartTask2(void const * argument)
     //osDelay(6000);
 	while(1){
         osDelay(40); // TODO: osDelayUntil
-        if(counter < 500){
+        if(counter < 250){
             totDt += accDt;
             counter++;
+            
             //UART_Print("Total %d", xPortGetMinimumEverFreeHeapSize());
             //UART_Print(" pitch: %.4f", pitch);
             //UART_Print(" roll: %.4f", roll);
@@ -360,10 +365,11 @@ void TelemetryStartTask2(void const * argument)
             //UART_Print(" b2: %.4f", baro2);
             
             //----- Print to plot
-            UART_Print(" %.4f", accDt);
+            UART_Print(" %.4f", totDt);
             UART_Print(" %.4f", accAltitude);
             UART_Print(" %.4f", 100 * baro1Altitude);
             UART_Print(" %.4f", altitude);
+            UART_Print(" %.4f", altitude2);
             //------
             
             //----- Print to plot
