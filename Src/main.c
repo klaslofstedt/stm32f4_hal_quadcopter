@@ -319,15 +319,15 @@ int main(void)
     
     /* definition and creation of TelemetryTask */
     osThreadDef(TelemetryTask, TelemetryStartTask, osPriorityBelowNormal, 0, 256);
-    TelemetryTaskHandle = osThreadCreate(osThread(TelemetryTask), NULL);
+    //TelemetryTaskHandle = osThreadCreate(osThread(TelemetryTask), NULL);
     
     /* definition and creation of MS5803Task */
     osThreadDef(MS5803Task, MS5803StartTask, osPriorityNormal, 0, 256);
-    //MS5803TaskHandle = osThreadCreate(osThread(MS5803Task), NULL);
+    MS5803TaskHandle = osThreadCreate(osThread(MS5803Task), NULL);
     
     /* definition and creation of TelemetryTask2 */
     osThreadDef(TelemetryTask2, TelemetryStartTask2, osPriorityBelowNormal, 0, 256);
-    //TelemetryTask2Handle = osThreadCreate(osThread(TelemetryTask2), NULL);
+    TelemetryTask2Handle = osThreadCreate(osThread(TelemetryTask2), NULL);
     
     /* definition and creation of VL53L0XTask */
     osThreadDef(VL53L0XTask, VL53L0XStartTask, osPriorityNormal, 0, 256);
@@ -389,7 +389,7 @@ float esc1, esc2, esc3, esc4;
 /* USER CODE END 4 */
 
 /* QuadcopterStartTask function */
-void QuadcopterStartTask(void const * argument)
+void QuadcopterStartTask(void const *argument)
 {
     /* USER CODE BEGIN QuadcopterStartTask */
     
@@ -463,15 +463,29 @@ void QuadcopterStartTask(void const * argument)
         PID_Calc(&pitchPid);
         PID_Calc(&rollPid);
         PID_Calc(&altitudePid);
-        // Calculate the motor values
-        esc1 = /*HOVER_THRUST + altitudePid.output +*/ rollPid.output + pitchPid.output /*+ yawPid.output*/;
-        esc2 = /*HOVER_THRUST + altitudePid.output +*/ rollPid.output - pitchPid.output /*- yawPid.output*/;
-        esc3 = /*HOVER_THRUST + altitudePid.output */- rollPid.output - pitchPid.output /*+ yawPid.output*/;
-        esc4 = /*HOVER_THRUST + altitudePid.output */- rollPid.output + pitchPid.output /*- yawPid.output*/;
         
+        // Assign local variables
+        float pitch     = pitchPid.output;
+        float roll      = rollPid.output;
+        float yaw       = yawPid.output;
+        float altitude  = altitudePid.output;
+        float x         = 0; //xPid.output;
+        float y         = 0; //yPid.output;
+        float hover     = HOVER_THRUST;
+        
+        // Calculate the motor values
         // 1  front  4
         // left  right
         // 2  back   3
+        esc1 = hover + altitude + roll + pitch + yaw + x + y;
+        esc2 = hover + altitude + roll - pitch - yaw - x + y;
+        esc3 = hover + altitude - roll - pitch + yaw - x - y;
+        esc4 = hover + altitude - roll + pitch - yaw + x - y;
+        //esc1 = /*HOVER_THRUST + altitudePid.output +*/ rollPid.output + pitchPid.output /*+ yawPid.output*/;
+        //esc2 = /*HOVER_THRUST + altitudePid.output +*/ rollPid.output - pitchPid.output /*- yawPid.output*/;
+        //esc3 = /*HOVER_THRUST + altitudePid.output */- rollPid.output - pitchPid.output /*+ yawPid.output*/;
+        //esc4 = /*HOVER_THRUST + altitudePid.output */- rollPid.output + pitchPid.output /*- yawPid.output*/;
+        
         ESC_SetSpeed(TIM_CHANNEL_1, esc1);
         ESC_SetSpeed(TIM_CHANNEL_2, esc2);
         ESC_SetSpeed(TIM_CHANNEL_3, esc3);
@@ -492,7 +506,8 @@ void TelemetryStartTask(void const * argument)
     uint32_t counter = 0;
     while(1){
         osDelay(50); // TODO: osDelayUntil
-        if(counter < 20000){
+        HAL_GPIO_WritePin(GPIOC, GPIO_PIN_3, GPIO_PIN_SET);
+        if(counter < 200000){
             totDt += pitchPid.dt;
             counter++;
             //UART_Print(" range %d", range_mm);
@@ -538,6 +553,7 @@ void TelemetryStartTask(void const * argument)
             
             UART_Print("\n\r");
         }
+        HAL_GPIO_WritePin(GPIOC, GPIO_PIN_3, GPIO_PIN_RESET);
     }
     /* USER CODE END TelemetryStartTask */
 }
