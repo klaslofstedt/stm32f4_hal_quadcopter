@@ -6,8 +6,8 @@
 
 float h;
 float v;
-float Q_accel = 0.001;
-float R_altitude = 0.1;
+float Q_accel = 0.1;
+float R_altitude = 1;
 
 float P[2][2] =
 {

@@ -48,8 +48,8 @@ FilterKalman_t angleFilterKalman = {
 
     .Q[0] = 0.001,   // Variance for accel
     .Q[1] = 0.001,   // Variance for accel
-    .R[0] = 0.1,    // Variance for baro
-    .R[1] = 0.1,    // Variance for baro
+    .R[0] = 0.5,    // Variance for baro
+    .R[1] = 0.5,    // Variance for baro
 
     // ????????
     .H[0][0] = 1,
@@ -311,7 +311,7 @@ void AltitudeStartTask(void const * argument)
             
             angleFilterKalman.u = accAccelerationLpf;
             angleFilterKalman.z[0] = baro1AltitudeLpf;
-            angleFilterKalman.z[1] = 0;//baro1Velocity;
+            //angleFilterKalman.z[1] = 0;//baro1Velocity;
             
             Filter_Kalman(&angleFilterKalman);
             
