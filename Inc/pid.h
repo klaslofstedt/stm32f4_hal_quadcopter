@@ -22,6 +22,6 @@ typedef struct{
 	float output;
 }PID_t;
 
-void PID_Calc(PID_t *pid);
+float PID_Calc(PID_t *pid);
 
 #endif

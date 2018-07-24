@@ -6,7 +6,7 @@
 // Might wanna have a better error handling when using delta input as rate:
 // https://github.com/Lauszus/LaunchPadFlightController/blob/fddbe4eb9303ea4301a714585d7383a2de275d80/src/PID.c
 
-void PID_Calc(PID_t *pid)
+float PID_Calc(PID_t *pid)
 {
     // These are used for ease to read
     float p_term, i_term, d_term, error, output;
@@ -39,4 +39,6 @@ void PID_Calc(PID_t *pid)
     pid->output = constrain(output, pid->boundary_min, pid->boundary_max);
     pid->last_input = pid->input;
     pid->last_error = error;
+    
+    return pid->output;
 }

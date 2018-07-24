@@ -78,8 +78,6 @@
 #define M_PI 3.14159265358979
 #endif
 
-#define HOVER_THRUST 0.542f
-
 /* USER CODE END Includes */
 
 /* Private variables ---------------------------------------------------------*/
@@ -245,7 +243,7 @@ int main(void)
     HAL_TIM_IC_Start_IT(&htim12, TIM_CHANNEL_2);
     HAL_TIM_IC_Start_IT(&htim12, TIM_CHANNEL_1);
     
-    // Initialize ESCs
+    // Initialize ESCs TIM1 PE9, PE11, PE13, PE14
     //ESC_Init(TIM_CHANNEL_1);
     //ESC_Init(TIM_CHANNEL_2);
     //ESC_Init(TIM_CHANNEL_3);
@@ -255,7 +253,7 @@ int main(void)
     //ESC_SetSpeed(TIM_CHANNEL_1, 1.0f);
     //ESC_SetSpeed(TIM_CHANNEL_2, 0.0f);
     
-    // Initialize joystick
+    // Initialize joystick PA0, PA1, PA7, PE6, PB8, PD13
     Joystick_Init(&yawJoystick, TIM2);
     Joystick_Init(&pitchJoystick, TIM3);
     Joystick_Init(&rollJoystick, TIM4);
@@ -264,14 +262,14 @@ int main(void)
     Joystick_Init(&switchrJoystick, TIM12);
     
     // Initialize EM7180 (gyro, acc, mag, baro)
-    if(EM7180_Init()){ // TODO: Init with i2c struct, interrupt and Hz
+    if(EM7180_Init()){ // TODO: Init with i2c3 struct, interrupt and Hz
         UART_Print("EM7180 Initialized\n\r");
     }else{ // Print error message
         UART_Print(EM7180_GetErrorString());
     }
     
     // Initialize VL53L0X (laser)
-    if(VL53L0X_Init()){ // TODO: Init with i2c struct, interrupt and Hz
+    if(VL53L0X_Init()){ // TODO: Init with i2c1 struct, interrupt and Hz
         UART_Print("VL53L0X Initialized\n\r");
     }else{ // Print error message
         UART_Print("VL53L0X Error (but will likely work anyway)\n\r");
@@ -319,7 +317,7 @@ int main(void)
     
     /* definition and creation of TelemetryTask */
     osThreadDef(TelemetryTask, TelemetryStartTask, osPriorityBelowNormal, 0, 256);
-    //TelemetryTaskHandle = osThreadCreate(osThread(TelemetryTask), NULL);
+    TelemetryTaskHandle = osThreadCreate(osThread(TelemetryTask), NULL);
     
     /* definition and creation of MS5803Task */
     osThreadDef(MS5803Task, MS5803StartTask, osPriorityNormal, 0, 256);
@@ -327,7 +325,7 @@ int main(void)
     
     /* definition and creation of TelemetryTask2 */
     osThreadDef(TelemetryTask2, TelemetryStartTask2, osPriorityBelowNormal, 0, 256);
-    TelemetryTask2Handle = osThreadCreate(osThread(TelemetryTask2), NULL);
+    //TelemetryTask2Handle = osThreadCreate(osThread(TelemetryTask2), NULL);
     
     /* definition and creation of VL53L0XTask */
     osThreadDef(VL53L0XTask, VL53L0XStartTask, osPriorityNormal, 0, 256);
@@ -458,20 +456,15 @@ void QuadcopterStartTask(void const *argument)
         altitudePid.input    = altitude;
         altitudePid.rate     = altitudeVelocity;
         altitudePid.dt       = altitudeDt;
-        // Calculate PID values
-        PID_Calc(&yawPid);
-        PID_Calc(&pitchPid);
-        PID_Calc(&rollPid);
-        PID_Calc(&altitudePid);
         
-        // Assign local variables
-        float pitch     = pitchPid.output;
-        float roll      = rollPid.output;
-        float yaw       = yawPid.output;
-        float altitude  = altitudePid.output;
+        // Calculate PID values
+        float pitch     = PID_Calc(&pitchPid);
+        float roll      = PID_Calc(&rollPid);
+        float yaw       = PID_Calc(&yawPid);
+        float altitude  = PID_Calc(&altitudePid);
         float x         = 0; //xPid.output;
         float y         = 0; //yPid.output;
-        float hover     = HOVER_THRUST;
+        float hover     = 0.542f;
         
         // Calculate the motor values
         // 1  front  4
@@ -490,6 +483,31 @@ void QuadcopterStartTask(void const *argument)
         ESC_SetSpeed(TIM_CHANNEL_2, esc2);
         ESC_SetSpeed(TIM_CHANNEL_3, esc3);
         ESC_SetSpeed(TIM_CHANNEL_4, esc4);
+        
+        // Set PID constants
+        if(Joystick_ReadDuty(&yawJoystick) < 1200){
+            //
+            //hover = hover - 0.01;
+            pitchPid.k_p = pitchPid.k_p - 0.00001;
+            rollPid.k_p = rollPid.k_p - 0.00001;
+        }
+        if(Joystick_ReadDuty(&yawJoystick) > 1700){
+            //
+            //hover = hover + 0.01;
+            pitchPid.k_p = pitchPid.k_p + 0.00001;
+            rollPid.k_p = rollPid.k_p + 0.00001;
+        }
+        if(Joystick_ReadDuty(&thrustJoystick) < 1200){
+            //
+            pitchPid.k_d = pitchPid.k_d - 0.000001;
+            rollPid.k_d = rollPid.k_d - 0.00001;
+        }
+        if(Joystick_ReadDuty(&thrustJoystick) > 1700){
+            //
+            pitchPid.k_d = pitchPid.k_d + 0.000001;
+            rollPid.k_d = rollPid.k_d + 0.00001;
+        }
+        
         
         // Turn off LED
         HAL_GPIO_WritePin(GPIOC, GPIO_PIN_1, GPIO_PIN_RESET);
@@ -526,7 +544,7 @@ void TelemetryStartTask(void const * argument)
             //UART_Print(" %.8f", pitchRate);
             //UART_Print(" %.4f", pitchPid.rate_calc);
             
-            UART_Print(" rollP %.4f", rollPid.output);
+            /*UART_Print(" rollP %.4f", rollPid.output);
             UART_Print(" pitchP %.4f", pitchPid.output);
             UART_Print(" yawP %.8f", yawPid.output);
             UART_Print(" altP %.4f", altitudePid.output);
@@ -534,7 +552,7 @@ void TelemetryStartTask(void const * argument)
             UART_Print(" esc1 %.4f", esc1);
             UART_Print(" esc2 %.4f", esc2);
             UART_Print(" esc3 %.4f", esc3);
-            UART_Print(" esc4 %.4f", esc4);
+            UART_Print(" esc4 %.4f", esc4);*/
             
             //input_pwm_ch1 = TIM1->CCR1;
             //input_pwm_ch2 = TIM1->CCR2;
@@ -550,6 +568,9 @@ void TelemetryStartTask(void const * argument)
             //UART_Print(" tim5: %.4f", Joystick_ReadDuty(&thrustJoystick));
             //UART_Print(" tim9: %.4f", Joystick_ReadDuty(&switchlJoystick));
             //UART_Print(" tim12: %.4f", Joystick_ReadDuty(&switchrJoystick));
+            
+            UART_Print(" p: %.6f", pitchPid.k_p);
+            UART_Print(" d: %.6f", pitchPid.k_d);
             
             UART_Print("\n\r");
         }

@@ -170,22 +170,28 @@ uint32_t Joystick_ReadFreq(Joystick_t *joystick)
 float Joystick_ReadDuty(Joystick_t *joystick)
 {
     if(joystick->TIMx == TIM2){
-        return mapf((float)uwDutyCycle2, JOYSTICK_READ_MIN, JOYSTICK_READ_MAX, JOYSTICK_OUTPUT_MIN, JOYSTICK_OUTPUT_MAX);
+        return uwDutyCycle2;
+        //return mapf((float)uwDutyCycle2, JOYSTICK_READ_MIN, JOYSTICK_READ_MAX, JOYSTICK_OUTPUT_MIN, JOYSTICK_OUTPUT_MAX);
     }
     if(joystick->TIMx == TIM3){
-        return mapf((float)uwDutyCycle3, JOYSTICK_READ_MIN, JOYSTICK_READ_MAX, JOYSTICK_OUTPUT_MIN, JOYSTICK_OUTPUT_MAX);
+        return uwDutyCycle3;
+        //return mapf((float)uwDutyCycle3, JOYSTICK_READ_MIN, JOYSTICK_READ_MAX, JOYSTICK_OUTPUT_MIN, JOYSTICK_OUTPUT_MAX);
     }
     if(joystick->TIMx == TIM4){
-        return mapf((float)uwDutyCycle4, JOYSTICK_READ_MIN, JOYSTICK_READ_MAX, JOYSTICK_OUTPUT_MIN, JOYSTICK_OUTPUT_MAX);
+        return uwDutyCycle4;
+        //return mapf((float)uwDutyCycle4, JOYSTICK_READ_MIN, JOYSTICK_READ_MAX, JOYSTICK_OUTPUT_MIN, JOYSTICK_OUTPUT_MAX);
     }
     if(joystick->TIMx == TIM5){
-        return mapf((float)uwDutyCycle5, JOYSTICK_READ_MIN, JOYSTICK_READ_MAX, JOYSTICK_OUTPUT_MIN, JOYSTICK_OUTPUT_MAX);
+        return uwDutyCycle5;
+        //return mapf((float)uwDutyCycle5, JOYSTICK_READ_MIN, JOYSTICK_READ_MAX, JOYSTICK_OUTPUT_MIN, JOYSTICK_OUTPUT_MAX);
     }
     if(joystick->TIMx == TIM9){
-        return mapf((float)uwDutyCycle9, JOYSTICK_READ_MIN, JOYSTICK_READ_MAX, JOYSTICK_OUTPUT_MIN, JOYSTICK_OUTPUT_MAX);
+        return uwDutyCycle9;
+        //return mapf((float)uwDutyCycle9, JOYSTICK_READ_MIN, JOYSTICK_READ_MAX, JOYSTICK_OUTPUT_MIN, JOYSTICK_OUTPUT_MAX);
     }
     if(joystick->TIMx == TIM12){
-        return mapf((float)uwDutyCycle12, JOYSTICK_READ_MIN, JOYSTICK_READ_MAX, JOYSTICK_OUTPUT_MIN, JOYSTICK_OUTPUT_MAX);
+        return uwDutyCycle12;
+        //return mapf((float)uwDutyCycle12, JOYSTICK_READ_MIN, JOYSTICK_READ_MAX, JOYSTICK_OUTPUT_MIN, JOYSTICK_OUTPUT_MAX);
     }
     return 0;
 }
