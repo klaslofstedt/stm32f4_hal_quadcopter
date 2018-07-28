@@ -254,12 +254,12 @@ int main(void)
     //ESC_SetSpeed(TIM_CHANNEL_2, 0.0f);
     
     // Initialize joystick PA0, PA1, PA7, PE6, PB8, PD13
-    Joystick_Init(&yawJoystick, TIM2);
-    Joystick_Init(&pitchJoystick, TIM3);
-    Joystick_Init(&rollJoystick, TIM4);
-    Joystick_Init(&thrustJoystick, TIM5);
-    Joystick_Init(&switchlJoystick, TIM9);
-    Joystick_Init(&switchrJoystick, TIM12);
+    Joystick_Init(&yawJoystick, TIM2); // PA1
+    Joystick_Init(&pitchJoystick, TIM3); // PA7
+    Joystick_Init(&rollJoystick, TIM4); // PB13
+    Joystick_Init(&thrustJoystick, TIM5); // PA0
+    Joystick_Init(&switchlJoystick, TIM9); // PE6
+    Joystick_Init(&switchrJoystick, TIM12); // PB15
     
     // Initialize EM7180 (gyro, acc, mag, baro)
     if(EM7180_Init()){ // TODO: Init with i2c3 struct, interrupt and Hz
