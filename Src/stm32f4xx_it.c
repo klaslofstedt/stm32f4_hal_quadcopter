@@ -39,11 +39,11 @@
 /* USER CODE BEGIN 0 */
 //#include "em7180.h"
 
-extern osSemaphoreId myBinarySemEM7180InterruptHandle;
+extern osSemaphoreId binarySemEM7180InterruptHandle;
 
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
-    osSemaphoreRelease(myBinarySemEM7180InterruptHandle);
+    osSemaphoreRelease(binarySemEM7180InterruptHandle);
 }
 /* USER CODE END 0 */
 

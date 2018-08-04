@@ -1,26 +1,3 @@
-/* 
-
-EM7180.cpp: Class implementation for EM7180 SENtral Sensor
-
-Adapted from
-
-https://raw.githubusercontent.com/kriswiner/Teensy_Flight_Controller/master/EM7180_MPU9250_BMP280
-
-This file is part of EM7180.
-
-EM7180 is free software: you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
-the Free Software Foundation, either version 3 of the License, or
-(at your option) any later version.
-
-EM7180 is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
-You should have received a copy of the GNU General Public License
-along with EM7180.  If not, see <http://www.gnu.org/licenses/>.
-*/
-
 #include "stm32f4xx_hal.h"
 #include "cmsis_os.h"
 
@@ -119,10 +96,10 @@ along with EM7180.  If not, see <http://www.gnu.org/licenses/>.
 #define GYRO_SCALE  6.5536f
 
 // Input Semaphore
-extern osSemaphoreId myBinarySemEM7180InterruptHandle;
+extern osSemaphoreId binarySemEM7180InterruptHandle;
 // Output Mail
-extern osMailQId myMailEM7180ToQuadHandle;
-extern osMailQId myMailEM7180ToAltHandle;
+extern osMailQId mailEM7180ToQuadHandle;
+extern osMailQId mailEM7180ToAltHandle;
 
 
 static uint8_t _eventStatus;
@@ -670,7 +647,7 @@ uint8_t EM7180_GetActualTempRate()
 
 
 /* StartEM7180Task function */
-void EM7180StartTask(void const * argument)
+void EM7180_StartTask(void const * argument)
 {                    
     // Quaternions
     float qw, qx, qy, qz;
@@ -691,14 +668,14 @@ void EM7180StartTask(void const * argument)
     uint32_t lastTimeBaro = 0;
    
 	while(1){
-        osSemaphoreWait(myBinarySemEM7180InterruptHandle, osWaitForever);
+        osSemaphoreWait(binarySemEM7180InterruptHandle, osWaitForever);
         HAL_GPIO_WritePin(GPIOC, GPIO_PIN_2, GPIO_PIN_SET);
         
         static Em7180Attitude_t *pEm7180Attitude;
-        pEm7180Attitude = osMailAlloc(myMailEM7180ToQuadHandle, osWaitForever);
+        pEm7180Attitude = osMailAlloc(mailEM7180ToQuadHandle, osWaitForever);
         
         static Em7180Altitude_t *pEm7180Altitude;
-        pEm7180Altitude = osMailAlloc(myMailEM7180ToAltHandle, osWaitForever);
+        pEm7180Altitude = osMailAlloc(mailEM7180ToAltHandle, osWaitForever);
         
         EM7180_CheckEventStatus();
         
@@ -789,9 +766,9 @@ void EM7180StartTask(void const * argument)
         pEm7180Altitude->dt = (float)dt*0.001;
         
         // Send attitude data by mail to quadcopter task 250 Hz
-        osMailPut(myMailEM7180ToQuadHandle, pEm7180Attitude);
+        osMailPut(mailEM7180ToQuadHandle, pEm7180Attitude);
         // Send altitude data by mail to altitude task 250 Hz
-        osMailPut(myMailEM7180ToAltHandle, pEm7180Altitude);
+        osMailPut(mailEM7180ToAltHandle, pEm7180Altitude);
         
         HAL_GPIO_WritePin(GPIOC, GPIO_PIN_2, GPIO_PIN_RESET);
 	}

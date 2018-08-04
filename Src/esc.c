@@ -5,12 +5,12 @@
 #include "functions.h"
 
 // Units of micro seconds
-#define ESC_MIN 1173
-#define ESC_MAX 1860
+#define ESC_MIN 1000//1173
+#define ESC_MAX 2000//1860
 #define ESC_INIT_LOW 0
 #define ESC_INIT_HIGH 850
 
-#define TIM_PRESCALER 12
+#define TIM_PRESCALER 7 //12
 
 void ESC_SetSpeed(uint32_t channel, float speed)
 {

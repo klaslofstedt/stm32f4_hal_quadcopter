@@ -23,17 +23,17 @@ void SystemClock_Config(void);
 void MX_GPIO_Init(void);
 void MX_I2C1_Init(void);
 void MX_I2C3_Init(void);
+void MX_TIM4_Init(void);
+void MX_USART2_UART_Init(void);
+void MX_USART6_UART_Init(void);
+void MX_UART5_Init(void);
 void MX_TIM2_Init(void);
 void MX_TIM1_Init(void);
 void MX_TIM9_Init(void);
 void MX_TIM12_Init(void);
 void MX_TIM3_Init(void);
-void MX_TIM4_Init(void);
 void MX_TIM5_Init(void);
 void MX_TIM10_Init(void);
-void MX_USART2_UART_Init(void);
-void MX_USART6_UART_Init(void);
-void MX_UART5_Init(void);
 
 void HAL_TIM_MspPostInit(TIM_HandleTypeDef *htim);
 

@@ -7,7 +7,7 @@ typedef struct{
     float dt;
 } Altitude_t;
 
-void AltitudeStartTask(void const * argument);
-void TelemetryStartTask2(void const * argument);
+void Altitude_StartTask(void const * argument);
+void Telemetry_StartTask2(void const * argument);
 
 #endif

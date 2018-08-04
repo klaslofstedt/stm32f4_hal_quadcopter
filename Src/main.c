@@ -63,6 +63,8 @@
 #include "altitude.h"
 #include "heading.h"
 #include "ms5803.h"
+#include "bmp280.h"
+#include "bmp180.h"
 #include "pid.h"
 #include "esc.h"
 #include "joystick.h"
@@ -81,7 +83,7 @@
 /* USER CODE END Includes */
 
 /* Private variables ---------------------------------------------------------*/
-I2C_HandleTypeDef hi2c1;
+/*I2C_HandleTypeDef hi2c1;
 I2C_HandleTypeDef hi2c3;
 
 TIM_HandleTypeDef htim1;
@@ -95,7 +97,7 @@ TIM_HandleTypeDef htim12;
 
 UART_HandleTypeDef huart5;
 UART_HandleTypeDef huart2;
-UART_HandleTypeDef huart6;
+UART_HandleTypeDef huart6;*/
 
 osThreadId EM7180TaskHandle;
 osThreadId AltitudeTaskHandle;
@@ -104,24 +106,33 @@ osThreadId TelemetryTaskHandle;
 osThreadId MS5803TaskHandle;
 osThreadId TelemetryTask2Handle;
 osThreadId VL53L0XTaskHandle;
-osSemaphoreId myBinarySemEM7180InterruptHandle;
+osThreadId BMP180TaskHandle;
+osThreadId BMP280TaskHandle;
+osMutexId mutexI2C1Handle;
+osSemaphoreId binarySemEM7180InterruptHandle;
 
 /* USER CODE BEGIN PV */
 /* Private variables ---------------------------------------------------------*/
-osMailQDef(myMailEM7180ToQuadHandle, 1, Em7180Attitude_t);
-osMailQId myMailEM7180ToQuadHandle;
+osMailQDef(mailEM7180ToQuadHandle, 1, Em7180Attitude_t);
+osMailQId mailEM7180ToQuadHandle;
 
-osMailQDef(myMailEM7180ToAltHandle, 1, Em7180Altitude_t);
-osMailQId myMailEM7180ToAltHandle;
+osMailQDef(mailEM7180ToAltHandle, 1, Em7180Altitude_t);
+osMailQId mailEM7180ToAltHandle;
 
-osMailQDef(myMailMS5803ToAltHandle, 1, Ms5803Altitude_t);
-osMailQId myMailMS5803ToAltHandle;
+osMailQDef(mailMS5803ToAltHandle, 1, Ms5803Altitude_t);
+osMailQId mailMS5803ToAltHandle;
 
-osMailQDef(myMailAltToQuadHandle, 1, Altitude_t);
-osMailQId myMailAltToQuadHandle;
+osMailQDef(mailBMP280ToAltHandle, 1, Bmp280Altitude_t);
+osMailQId mailBMP280ToAltHandle;
 
-osMailQDef(myMailVL53L0XToAltHandle, 1, Vl53l0xRange_t);
-osMailQId myMailVL53L0XToAltHandle;
+osMailQDef(mailBMP180ToAltHandle, 1, Bmp180Altitude_t);
+osMailQId mailBMP180ToAltHandle;
+
+osMailQDef(mailAltToQuadHandle, 1, Altitude_t);
+osMailQId mailAltToQuadHandle;
+
+osMailQDef(mailVL53L0XToAltHandle, 1, Vl53l0xRange_t);
+osMailQId mailVL53L0XToAltHandle;
 
 // Joystick objects
 Joystick_t yawJoystick;
@@ -143,9 +154,9 @@ PID_t yawPid = {
 PID_t pitchPid = {
     .boundary_max = 1.0f,
     .boundary_min = -1.0f,
-    .k_p = 0.0061,
+    .k_p = 0.0040,
     .k_i = 0.000001f,
-    .k_d = 0.0004f
+    .k_d = 0.00020f
 };
 
 PID_t rollPid = {
@@ -167,9 +178,10 @@ PID_t altitudePid = {
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
+void Quadcopter_StartTask(void const * argument);
+void Telemetry_StartTask(void const * argument);
 
-static void QuadcopterStartTask(void const * argument);
-static void TelemetryStartTask(void const * argument);
+
 
 /* USER CODE BEGIN PFP */
 /* Private function prototypes -----------------------------------------------*/
@@ -244,21 +256,27 @@ int main(void)
     HAL_TIM_IC_Start_IT(&htim12, TIM_CHANNEL_1);
     
     // Initialize ESCs TIM1 PE9, PE11, PE13, PE14
-    //ESC_Init(TIM_CHANNEL_1);
+    /*ESC_Init(TIM_CHANNEL_1);
     //ESC_Init(TIM_CHANNEL_2);
-    //ESC_Init(TIM_CHANNEL_3);
+    ESC_Init(TIM_CHANNEL_3);
     //ESC_Init(TIM_CHANNEL_4);
+    
+    ESC_SetSpeed(TIM_CHANNEL_1, 0);
+    //ESC_SetSpeed(TIM_CHANNEL_2, 0);
+    ESC_SetSpeed(TIM_CHANNEL_3, 0);
+    //ESC_SetSpeed(TIM_CHANNEL_4, 0);
+    HAL_Delay(2000);*/
     
     // TODO: Remove these :)
     //ESC_SetSpeed(TIM_CHANNEL_1, 1.0f);
     //ESC_SetSpeed(TIM_CHANNEL_2, 0.0f);
     
-    // Initialize joystick PA0, PA1, PA7, PE6, PB8, PD13
-    Joystick_Init(&yawJoystick, TIM2); // PA1
-    Joystick_Init(&pitchJoystick, TIM3); // PA7
-    Joystick_Init(&rollJoystick, TIM4); // PB13
-    Joystick_Init(&thrustJoystick, TIM5); // PA0
-    Joystick_Init(&switchlJoystick, TIM9); // PE6
+    // Initialize joystick
+    Joystick_Init(&yawJoystick,     TIM2);  // PA1
+    Joystick_Init(&pitchJoystick,   TIM3);  // PA7
+    Joystick_Init(&rollJoystick,    TIM4);  // PD13
+    Joystick_Init(&thrustJoystick,  TIM5);  // PA0
+    Joystick_Init(&switchlJoystick, TIM9);  // PE6
     Joystick_Init(&switchrJoystick, TIM12); // PB15
     
     // Initialize EM7180 (gyro, acc, mag, baro)
@@ -277,22 +295,41 @@ int main(void)
     }
     
     // Initialize MS5803 (baro)
-    if(MS5803_Init()){ // TODO: Init with i2c
-        UART_Print("MS5803 Initialized\n\r");
+    /*if(MS5803_Init()){ // TODO: Init with i2c
+    UART_Print("MS5803 Initialized\n\r");
+}else{ // Print error message
+    UART_Print(MS5803_GetErrorString());
+}*/
+    
+    // Initialize BMP280 (baro)
+    if(BMP280_Init()){ // TODO: Init with i2c
+        UART_Print("BMP280 Initialized\n\r");
     }else{ // Print error message
-        UART_Print(MS5803_GetErrorString());
+        UART_Print("BMP280 Error\n\r");
+    }
+    
+    // Initialize BMP180 (baro)
+    if(BMP180_Init()){ // TODO: Init with i2c
+        UART_Print("BMP180 Initialized\n\r");
+    }else{ // Print error message
+        UART_Print("BMP180 Error\n\r");
     }
     
     /* USER CODE END 2 */
+    
+    /* Create the mutex(es) */
+    /* definition and creation of mutexI2C1 */
+    osMutexDef(mutexI2C1);
+    mutexI2C1Handle = osMutexCreate(osMutex(mutexI2C1));
     
     /* USER CODE BEGIN RTOS_MUTEX */
     /* add mutexes, ... */
     /* USER CODE END RTOS_MUTEX */
     
     /* Create the semaphores(s) */
-    /* definition and creation of myBinarySemEM7180Interrupt */
-    osSemaphoreDef(myBinarySemEM7180Interrupt);
-    myBinarySemEM7180InterruptHandle = osSemaphoreCreate(osSemaphore(myBinarySemEM7180Interrupt), 1);
+    /* definition and creation of binarySemEM7180Interrupt */
+    osSemaphoreDef(binarySemEM7180Interrupt);
+    binarySemEM7180InterruptHandle = osSemaphoreCreate(osSemaphore(binarySemEM7180Interrupt), 1);
     
     /* USER CODE BEGIN RTOS_SEMAPHORES */
     /* add semaphores, ... */
@@ -304,32 +341,40 @@ int main(void)
     
     /* Create the thread(s) */
     /* definition and creation of EM7180Task */
-    osThreadDef(EM7180Task, EM7180StartTask, osPriorityAboveNormal, 0, 512);
+    osThreadDef(EM7180Task, EM7180_StartTask, osPriorityHigh, 0, 512);
     EM7180TaskHandle = osThreadCreate(osThread(EM7180Task), NULL);
     
     /* definition and creation of AltitudeTask */
-    osThreadDef(AltitudeTask, AltitudeStartTask, osPriorityAboveNormal, 0, 512);
+    osThreadDef(AltitudeTask, Altitude_StartTask, osPriorityHigh, 0, 512);
     AltitudeTaskHandle = osThreadCreate(osThread(AltitudeTask), NULL);
     
     /* definition and creation of QuadcopterTask */
-    osThreadDef(QuadcopterTask, QuadcopterStartTask, osPriorityAboveNormal, 0, 256);
+    osThreadDef(QuadcopterTask, Quadcopter_StartTask, osPriorityHigh, 0, 256);
     QuadcopterTaskHandle = osThreadCreate(osThread(QuadcopterTask), NULL);
     
     /* definition and creation of TelemetryTask */
-    osThreadDef(TelemetryTask, TelemetryStartTask, osPriorityBelowNormal, 0, 256);
-    TelemetryTaskHandle = osThreadCreate(osThread(TelemetryTask), NULL);
+    osThreadDef(TelemetryTask, Telemetry_StartTask, osPriorityLow, 0, 256);
+    //TelemetryTaskHandle = osThreadCreate(osThread(TelemetryTask), NULL);
     
     /* definition and creation of MS5803Task */
-    osThreadDef(MS5803Task, MS5803StartTask, osPriorityNormal, 0, 256);
-    MS5803TaskHandle = osThreadCreate(osThread(MS5803Task), NULL);
+    osThreadDef(MS5803Task, MS5803_StartTask, osPriorityNormal, 0, 256);
+    //MS5803TaskHandle = osThreadCreate(osThread(MS5803Task), NULL);
     
     /* definition and creation of TelemetryTask2 */
-    osThreadDef(TelemetryTask2, TelemetryStartTask2, osPriorityBelowNormal, 0, 256);
-    //TelemetryTask2Handle = osThreadCreate(osThread(TelemetryTask2), NULL);
+    osThreadDef(TelemetryTask2, Telemetry_StartTask2, osPriorityLow, 0, 256);
+    TelemetryTask2Handle = osThreadCreate(osThread(TelemetryTask2), NULL);
     
     /* definition and creation of VL53L0XTask */
-    osThreadDef(VL53L0XTask, VL53L0XStartTask, osPriorityNormal, 0, 256);
+    osThreadDef(VL53L0XTask, VL53L0X_StartTask, osPriorityAboveNormal, 0, 256);
     VL53L0XTaskHandle = osThreadCreate(osThread(VL53L0XTask), NULL);
+    
+    /* definition and creation of BMP180Task */
+    osThreadDef(BMP180Task, BMP180_StartTask, osPriorityBelowNormal, 0, 256);
+    BMP180TaskHandle = osThreadCreate(osThread(BMP180Task), NULL);
+    
+    /* definition and creation of BMP280Task */
+    osThreadDef(BMP280Task, BMP280_StartTask, osPriorityNormal, 0, 256);
+    BMP280TaskHandle = osThreadCreate(osThread(BMP280Task), NULL);
     
     /* USER CODE BEGIN RTOS_THREADS */
     /* add threads, ... */
@@ -338,11 +383,13 @@ int main(void)
     /* USER CODE BEGIN RTOS_QUEUES */
     /* add queues, ... */
     
-    myMailEM7180ToQuadHandle = osMailCreate(osMailQ(myMailEM7180ToQuadHandle), NULL);
-    myMailEM7180ToAltHandle = osMailCreate(osMailQ(myMailEM7180ToAltHandle), NULL);
-    myMailAltToQuadHandle = osMailCreate(osMailQ(myMailAltToQuadHandle), NULL);
-    myMailMS5803ToAltHandle = osMailCreate(osMailQ(myMailMS5803ToAltHandle), NULL);
-    myMailVL53L0XToAltHandle = osMailCreate(osMailQ(myMailVL53L0XToAltHandle), NULL);
+    mailEM7180ToQuadHandle    = osMailCreate(osMailQ(mailEM7180ToQuadHandle), NULL);
+    mailEM7180ToAltHandle     = osMailCreate(osMailQ(mailEM7180ToAltHandle), NULL);
+    mailAltToQuadHandle       = osMailCreate(osMailQ(mailAltToQuadHandle), NULL);
+    mailMS5803ToAltHandle     = osMailCreate(osMailQ(mailMS5803ToAltHandle), NULL);
+    mailBMP280ToAltHandle     = osMailCreate(osMailQ(mailBMP280ToAltHandle), NULL);
+    mailBMP180ToAltHandle     = osMailCreate(osMailQ(mailBMP180ToAltHandle), NULL);
+    mailVL53L0XToAltHandle    = osMailCreate(osMailQ(mailVL53L0XToAltHandle), NULL);
     /* USER CODE END RTOS_QUEUES */
     
     
@@ -366,30 +413,18 @@ int main(void)
     
 }
 
-
-/* USER CODE BEGIN 4 */
-
-// GPIO_PIN_12 altitude
-// GPIO_PIN_13 em7180
-// GPIO_PIN_14 ms5803
-// GPIO_PIN_15 quadcopter
-
-// PA2 - bluetooth rx
-// PA3 - bluetooth tx
-
 float yawAngle, pitchAngle, rollAngle;
 float yawRate, pitchRate, rollRate;
 float altitude, altitudeVelocity;
 float attitudeDt, altitudeDt;
+float hover = 0.0f;
 
 float esc1, esc2, esc3, esc4;
 
-/* USER CODE END 4 */
-
-/* QuadcopterStartTask function */
-void QuadcopterStartTask(void const *argument)
+/* Quadcopter_StartTask function */
+void Quadcopter_StartTask(void const * argument)
 {
-    /* USER CODE BEGIN QuadcopterStartTask */
+    /* USER CODE BEGIN Quadcopter_StartTask */
     
     // Allocate space for queued attitude struct
     static Em7180Attitude_t *pEm7180Attitude;
@@ -401,7 +436,7 @@ void QuadcopterStartTask(void const *argument)
     /* Infinite loop */
     while(1){
         // Wait on attitude data from em7180 task (250 Hz)
-        EM7180Event = osMailGet(myMailEM7180ToQuadHandle, osWaitForever);
+        EM7180Event = osMailGet(mailEM7180ToQuadHandle, osWaitForever);
         // Turn on LED
         HAL_GPIO_WritePin(GPIOC, GPIO_PIN_1, GPIO_PIN_SET);
         // Evaluate event status
@@ -418,11 +453,11 @@ void QuadcopterStartTask(void const *argument)
             // Get dt timestamp (seconds)
             attitudeDt  = pEm7180Attitude->dt;
             // Free the allocated struct memory
-            osMailFree(myMailEM7180ToQuadHandle, pEm7180Attitude);
+            osMailFree(mailEM7180ToQuadHandle, pEm7180Attitude);
         }
         
         // Poll altitude data from altitude task (50 Hz)
-        AltitudeEvent = osMailGet(myMailAltToQuadHandle, 0);
+        AltitudeEvent = osMailGet(mailAltToQuadHandle, 0);
         if (AltitudeEvent.status == osEventMail) {
             pAltitude = AltitudeEvent.value.p;
             // Get the altitude (cm)
@@ -432,24 +467,24 @@ void QuadcopterStartTask(void const *argument)
             // Get dt timestamp (seconds)
             altitudeDt  = (uint32_t)pAltitude->dt;
             // Free the allocated struct memory
-            osMailFree(myMailAltToQuadHandle, pAltitude);
+            osMailFree(mailAltToQuadHandle, pAltitude);
         }
         
         // Build yaw PID object
-        yawPid.setpoint = 0;//Joystick_ReadDuty(&yawJoystick);
-        yawPid.input    = yawAngle;
-        yawPid.rate     = yawRate;
-        yawPid.dt       = attitudeDt;
+        yawPid.setpoint   = 0;//Joystick_ReadDuty(&yawJoystick);
+        yawPid.input      = yawAngle;
+        yawPid.rate       = yawRate;
+        yawPid.dt         = attitudeDt;
         // Build pitch PID object
         pitchPid.setpoint = 0;//Joystick_ReadDuty(&pitchJoystick);
         pitchPid.input    = pitchAngle;
         pitchPid.rate     = pitchRate;
         pitchPid.dt       = attitudeDt;
         // Build roll PID object
-        rollPid.setpoint = 0;//Joystick_ReadDuty(&rollJoystick);
-        rollPid.input    = rollAngle;
-        rollPid.rate     = rollRate;
-        rollPid.dt       = attitudeDt;
+        rollPid.setpoint  = 0;//Joystick_ReadDuty(&rollJoystick);
+        rollPid.input     = rollAngle;
+        rollPid.rate      = rollRate;
+        rollPid.dt        = attitudeDt;
         // TODO: joystick thrust cannot return -1 to 1 but rather a higher/lower
         // setpoint value
         altitudePid.setpoint = 50;//Joystick_ReadDuty(&thrustJoystick);
@@ -459,75 +494,75 @@ void QuadcopterStartTask(void const *argument)
         
         // Calculate PID values
         float pitch     = PID_Calc(&pitchPid);
-        float roll      = PID_Calc(&rollPid);
-        float yaw       = PID_Calc(&yawPid);
-        float altitude  = PID_Calc(&altitudePid);
+        float roll      = 0;//PID_Calc(&rollPid);
+        float yaw       = 0;//PID_Calc(&yawPid);
+        float alt       = 0;//PID_Calc(&altitudePid);
         float x         = 0; //xPid.output;
         float y         = 0; //yPid.output;
-        float hover     = 0.542f;
+        hover     = 0.3;
         
         // Calculate the motor values
         // 1  front  4
         // left  right
         // 2  back   3
-        esc1 = hover + altitude + roll + pitch + yaw + x + y;
-        esc2 = hover + altitude + roll - pitch - yaw - x + y;
-        esc3 = hover + altitude - roll - pitch + yaw - x - y;
-        esc4 = hover + altitude - roll + pitch - yaw + x - y;
+        esc1 = hover + alt + roll + pitch + yaw + x + y;
+        esc2 = hover + alt + roll - pitch - yaw - x + y;
+        esc3 = hover + alt - roll - pitch + yaw - x - y;
+        esc4 = hover + alt - roll + pitch - yaw + x - y;
         //esc1 = /*HOVER_THRUST + altitudePid.output +*/ rollPid.output + pitchPid.output /*+ yawPid.output*/;
         //esc2 = /*HOVER_THRUST + altitudePid.output +*/ rollPid.output - pitchPid.output /*- yawPid.output*/;
         //esc3 = /*HOVER_THRUST + altitudePid.output */- rollPid.output - pitchPid.output /*+ yawPid.output*/;
         //esc4 = /*HOVER_THRUST + altitudePid.output */- rollPid.output + pitchPid.output /*- yawPid.output*/;
         
-        ESC_SetSpeed(TIM_CHANNEL_1, esc1);
+        /*ESC_SetSpeed(TIM_CHANNEL_1, esc1);
         ESC_SetSpeed(TIM_CHANNEL_2, esc2);
         ESC_SetSpeed(TIM_CHANNEL_3, esc3);
-        ESC_SetSpeed(TIM_CHANNEL_4, esc4);
+        ESC_SetSpeed(TIM_CHANNEL_4, esc4);*/
         
         // Set PID constants
         if(Joystick_ReadDuty(&yawJoystick) < 1200){
             //
-            //hover = hover - 0.01;
+            //hover = hover - 0.001;
             pitchPid.k_p = pitchPid.k_p - 0.00001;
-            rollPid.k_p = rollPid.k_p - 0.00001;
+            //rollPid.k_p = rollPid.k_p - 0.00001;
         }
         if(Joystick_ReadDuty(&yawJoystick) > 1700){
             //
-            //hover = hover + 0.01;
+            //hover = hover + 0.001;
             pitchPid.k_p = pitchPid.k_p + 0.00001;
-            rollPid.k_p = rollPid.k_p + 0.00001;
+            //rollPid.k_p = rollPid.k_p + 0.00001;
         }
-        if(Joystick_ReadDuty(&thrustJoystick) < 1200){
+        if(Joystick_ReadDuty(&pitchJoystick) < 1200){
             //
             pitchPid.k_d = pitchPid.k_d - 0.000001;
-            rollPid.k_d = rollPid.k_d - 0.00001;
+            //rollPid.k_d = rollPid.k_d - 0.00001;
         }
-        if(Joystick_ReadDuty(&thrustJoystick) > 1700){
+        if(Joystick_ReadDuty(&pitchJoystick) > 1700){
             //
             pitchPid.k_d = pitchPid.k_d + 0.000001;
-            rollPid.k_d = rollPid.k_d + 0.00001;
+            //rollPid.k_d = rollPid.k_d + 0.00001;
         }
         
         
         // Turn off LED
         HAL_GPIO_WritePin(GPIOC, GPIO_PIN_1, GPIO_PIN_RESET);
     }
-    /* USER CODE END QuadcopterStartTask */
+    /* USER CODE END Quadcopter_StartTask */
 }
 
-/* TelemetryStartTask function */
-void TelemetryStartTask(void const * argument)
+/* Telemetry_StartTask function */
+void Telemetry_StartTask(void const * argument)
 {
-    /* USER CODE BEGIN TelemetryStartTask */
+    /* USER CODE BEGIN Telemetry_StartTask */
     /* Infinite loop */
     float totDt = 0;
     uint32_t counter = 0;
     while(1){
-        osDelay(50); // TODO: osDelayUntil
+        osDelay(500); // TODO: osDelayUntil
         HAL_GPIO_WritePin(GPIOC, GPIO_PIN_3, GPIO_PIN_SET);
         if(counter < 200000){
             totDt += pitchPid.dt;
-            counter++;
+            //counter++;
             //UART_Print(" range %d", range_mm);
             //UART_Print("Total %d", xPortGetMinimumEverFreeHeapSize());
             //UART_Print(" gx: %.4f", gyro_x);
@@ -549,6 +584,8 @@ void TelemetryStartTask(void const * argument)
             UART_Print(" yawP %.8f", yawPid.output);
             UART_Print(" altP %.4f", altitudePid.output);
             
+            
+            
             UART_Print(" esc1 %.4f", esc1);
             UART_Print(" esc2 %.4f", esc2);
             UART_Print(" esc3 %.4f", esc3);
@@ -562,13 +599,14 @@ void TelemetryStartTask(void const * argument)
             //UART_Print(" a3: %.4f", a3);
             
             // Read joystick
-            //UART_Print(" tim2: %.4f", Joystick_ReadDuty(&yawJoystick));
-            //UART_Print(" tim3: %.4f", Joystick_ReadDuty(&pitchJoystick));
-            //UART_Print(" tim4: %.4f", Joystick_ReadDuty(&rollJoystick));
-            //UART_Print(" tim5: %.4f", Joystick_ReadDuty(&thrustJoystick));
-            //UART_Print(" tim9: %.4f", Joystick_ReadDuty(&switchlJoystick));
-            //UART_Print(" tim12: %.4f", Joystick_ReadDuty(&switchrJoystick));
-            
+            /*UART_Print(" tim2: %.4f", Joystick_ReadDuty(&yawJoystick));
+            UART_Print(" tim3: %.4f", Joystick_ReadDuty(&pitchJoystick));
+            UART_Print(" tim4: %.4f", Joystick_ReadDuty(&rollJoystick));
+            UART_Print(" tim5: %.4f", Joystick_ReadDuty(&thrustJoystick));
+            UART_Print(" tim9: %.4f", Joystick_ReadDuty(&switchlJoystick));
+            UART_Print(" tim12: %.4f", Joystick_ReadDuty(&switchrJoystick));
+            */
+            //UART_Print(" hover: %.4f", hover);
             UART_Print(" p: %.6f", pitchPid.k_p);
             UART_Print(" d: %.6f", pitchPid.k_d);
             
@@ -576,8 +614,9 @@ void TelemetryStartTask(void const * argument)
         }
         HAL_GPIO_WritePin(GPIOC, GPIO_PIN_3, GPIO_PIN_RESET);
     }
-    /* USER CODE END TelemetryStartTask */
+    /* USER CODE END Telemetry_StartTask */
 }
+
 
 /**
 * @brief  This function is executed in case of error occurrence.

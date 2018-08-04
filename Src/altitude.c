@@ -9,6 +9,8 @@
 #include "hardware.h"
 #include "em7180.h"
 #include "ms5803.h"
+#include "bmp280.h"
+#include "bmp180.h"
 #include "uart_print.h"
 #include "altitude.h"
 #include "types.h"
@@ -29,11 +31,13 @@
 #define MIN_BARO_ALT 100    // 1m
 
 // Input mail
-extern osMailQId myMailEM7180ToAltHandle;
-extern osMailQId myMailMS5803ToAltHandle;
-extern osMailQId myMailVL53L0XToAltHandle;
+extern osMailQId mailEM7180ToAltHandle;
+extern osMailQId mailMS5803ToAltHandle;
+extern osMailQId mailBMP280ToAltHandle;
+extern osMailQId mailBMP180ToAltHandle;
+extern osMailQId mailVL53L0XToAltHandle;
 // Output mail
-extern osMailQId myMailAltToQuadHandle;
+extern osMailQId mailAltToQuadHandle;
 
 
 FilterAverage_t accFilterAverage = {
@@ -51,6 +55,13 @@ FilterAverage_t baro1FilterAverage = {
 };
 
 FilterAverage_t baro2FilterAverage = {
+    .sample_start = 500,
+    .sample_stop = 1000,
+    .counter = 0,
+    .ready = false
+};
+
+FilterAverage_t baro3FilterAverage = {
     .sample_start = 500,
     .sample_stop = 1000,
     .counter = 0,
@@ -76,6 +87,10 @@ FilterLowpass_t baro2AltFilterLowpass = {
     .cf = 1.0f
 };
 
+FilterLowpass_t baro3AltFilterLowpass = {
+    .cf = 1.0f
+};
+
 FilterLowpass_t baro1VelFilterLowpass = {
     .cf = 5.0f
 };
@@ -97,11 +112,13 @@ uint8_t readyy = 0;
 static float accRaw;
 static float rangeRaw;
 static float baro1Raw;
-static float baroRaw;
+static float baro2Raw;
+static float baro3Raw;
 
 static float accDt;
 static float baro1Dt;
 static float baro2Dt;
+static float baro3Dt;
 static float totDt;
 static float rangeDt;
 static float sensorsDt;
@@ -111,11 +128,13 @@ static float sensorsDt;
 static float accOffset;
 static float baro1Offset;
 static float baro2Offset;
+static float baro3Offset;
 static float rangeOffset;
 
 // Input data without offset
 static float baro1Altitude; 
 static float baro2Altitude;
+static float baro3Altitude;
 static float accAcceleration;
 static float rangeAltitude;
 
@@ -126,6 +145,7 @@ static float sensorsAltitude;
 static float accAccelerationLpf;
 static float baro1AltitudeLpf;
 static float baro2AltitudeLpf;
+static float baro3AltitudeLpf;
 static float baroAltitudeTot;
 //static float range_lp;
 // Derived velocity 
@@ -154,7 +174,7 @@ static float velocity2 = 0;
 static float accAltitude = 0;
 static float accVel = 0;
 
-void AltitudeStartTask(void const * argument)
+void Altitude_StartTask(void const * argument)
 {    
     // Mail from EM7180 task
     static Em7180Altitude_t *pEm7180Attitude; //pEm7180Alt
@@ -162,16 +182,22 @@ void AltitudeStartTask(void const * argument)
     // Mail from MS5803 task
     static Ms5803Altitude_t *pMs5803Altitude;
     osEvent MS5803Event;
+    // Mail from BMP280 task
+    static Bmp280Altitude_t *pBmp280Altitude;
+    osEvent BMP280Event;
+    // Mail from BMP180 task
+    static Bmp180Altitude_t *pBmp180Altitude;
+    osEvent BMP180Event;
     // Mail from VL53l0X task
     static Vl53l0xRange_t *pVl53l0xRange;
     osEvent VL53L0XEvent;
     // Mail to quadcopter task
     Altitude_t *alt_quad_ptr;
-    alt_quad_ptr = osMailAlloc(myMailAltToQuadHandle, osWaitForever);
+    alt_quad_ptr = osMailAlloc(mailAltToQuadHandle, osWaitForever);
     
 	while(1){
         // Wait forever for acc & baro data from the em7180 task
-        EM7180Event = osMailGet(myMailEM7180ToAltHandle, osWaitForever);
+        EM7180Event = osMailGet(mailEM7180ToAltHandle, osWaitForever);
         // Turn on LED
         HAL_GPIO_WritePin(GPIOC, GPIO_PIN_3, GPIO_PIN_SET);
         
@@ -183,20 +209,43 @@ void AltitudeStartTask(void const * argument)
             accDt = pEm7180Attitude->dt;
             baro1Dt = pEm7180Attitude->dt_baro;
             
-            osMailFree(myMailEM7180ToAltHandle, pEm7180Attitude);
+            osMailFree(mailEM7180ToAltHandle, pEm7180Attitude);
         }
         // Poll data from baro data from the ms5803 task
-        MS5803Event = osMailGet(myMailMS5803ToAltHandle, 0);
+        /*MS5803Event = osMailGet(mailMS5803ToAltHandle, 0);
         if (MS5803Event.status == osEventMail) {
             pMs5803Altitude = MS5803Event.value.p;
             
-            baroRaw = pMs5803Altitude->altitude;
+            baro2Raw = pMs5803Altitude->altitude;
             baro2Dt = pMs5803Altitude->dt;
             
-            osMailFree(myMailMS5803ToAltHandle, pMs5803Altitude);
+            osMailFree(mailMS5803ToAltHandle, pMs5803Altitude);
+        }*/
+        
+        // Poll data from baro data from the BMP280 task
+        BMP280Event = osMailGet(mailBMP280ToAltHandle, 0);
+        if (BMP280Event.status == osEventMail) {
+            pBmp280Altitude = BMP280Event.value.p;
+            
+            baro2Raw = pBmp280Altitude->altitude;
+            baro2Dt = pBmp280Altitude->dt;
+            
+            osMailFree(mailBMP280ToAltHandle, pBmp280Altitude);
         }
+        
+        // Poll data from baro data from the BMP180 task
+        BMP180Event = osMailGet(mailBMP180ToAltHandle, 0);
+        if (BMP180Event.status == osEventMail) {
+            pBmp180Altitude = BMP180Event.value.p;
+            
+            baro3Raw = pBmp180Altitude->altitude;
+            baro3Dt = pBmp180Altitude->dt;
+            
+            osMailFree(mailBMP180ToAltHandle, pBmp180Altitude);
+        }
+        
         // Poll data from range data from the vl53l0x task
-        VL53L0XEvent = osMailGet(myMailVL53L0XToAltHandle, 0);
+        VL53L0XEvent = osMailGet(mailVL53L0XToAltHandle, 0);
         if (VL53L0XEvent.status == osEventMail) {
             //HAL_GPIO_WritePin(GPIOC, GPIO_PIN_3, GPIO_PIN_SET);
             pVl53l0xRange = VL53L0XEvent.value.p;
@@ -204,7 +253,7 @@ void AltitudeStartTask(void const * argument)
             rangeRaw = pVl53l0xRange->range;
             rangeDt = pVl53l0xRange->dt;
             
-            osMailFree(myMailVL53L0XToAltHandle, pVl53l0xRange);
+            osMailFree(mailVL53L0XToAltHandle, pVl53l0xRange);
             //HAL_GPIO_WritePin(GPIOC, GPIO_PIN_3, GPIO_PIN_RESET);
         }
         
@@ -223,13 +272,21 @@ void AltitudeStartTask(void const * argument)
         }
         baro1Altitude = baro1Raw - baro1Offset;
         
-        // Calculate barometer1 offset
+        // Calculate barometer2 offset
         if(!baro2FilterAverage.ready){
-            baro2FilterAverage.sample = baroRaw;
+            baro2FilterAverage.sample = baro2Raw;
             Filter_Average(&baro2FilterAverage);
             baro2Offset = baro2FilterAverage.average;
         }
-        baro2Altitude = baroRaw - baro2Offset;
+        baro2Altitude = baro2Raw - baro2Offset;
+        
+        // Calculate barometer3 offset
+        if(!baro3FilterAverage.ready){
+            baro3FilterAverage.sample = baro3Raw;
+            Filter_Average(&baro3FilterAverage);
+            baro3Offset = baro3FilterAverage.average;
+        }
+        baro3Altitude = baro3Raw - baro3Offset;
         
         // Calculate range offset
         if(!rangeFilterAverage.ready){
@@ -239,29 +296,35 @@ void AltitudeStartTask(void const * argument)
         }
         rangeAltitude = rangeRaw - rangeOffset;
         
-        if(accFilterAverage.ready && baro1FilterAverage.ready && baro2FilterAverage.ready){
-            
+        if(accFilterAverage.ready && baro1FilterAverage.ready && baro2FilterAverage.ready && baro3FilterAverage.ready){
+            // Remove this bull
             if(readyy == 0){
-                //UART_Print("=========================");
+                UART_Print("=========================");
                 //UART_Print(" ao: %.4f\n\r", accOffset);
-                //UART_Print(" bo: %.4f", baro1Offset);
-                //UART_Print(" bo: %.4f", baro2Offset);
+                UART_Print(" bo: %.4f", baro1Offset);
+                UART_Print(" bo: %.4f", baro2Offset);
+                UART_Print(" bo: %.4f", baro3Offset);
                 //UART_Print(" ro: %.4f", rangeOffset);
-                //UART_Print("\n\r");
+                UART_Print("\n\r");
                 //UART_Print(" baro1Dt: %.8f", baro1Dt);
                 //UART_Print(" accDt: %.8f\n\r", accDt);
                 readyy = 1;
             }
-            // Low pass filter barometric altitude
+            // Low pass filter EM7180 (BMP280) barometric altitude
             baro1AltFilterLowpass.input = 100 * baro1Altitude;
             baro1AltFilterLowpass.dt = baro1Dt;
             Filter_Lowpass(&baro1AltFilterLowpass);
             baro1AltitudeLpf = baro1AltFilterLowpass.output;
-            
+            // Low pass filter BMP280 barometric altitude
             baro2AltFilterLowpass.input = 100 * baro2Altitude;
             baro2AltFilterLowpass.dt = baro2Dt;
             Filter_Lowpass(&baro2AltFilterLowpass);
             baro2AltitudeLpf = baro2AltFilterLowpass.output;
+            // Low pass filter BMP180 barometric altitude
+            baro3AltFilterLowpass.input = 100 * baro3Altitude;
+            baro3AltFilterLowpass.dt = baro3Dt;
+            Filter_Lowpass(&baro3AltFilterLowpass);
+            baro3AltitudeLpf = baro3AltFilterLowpass.output;
             
             // TODO: This method does not take into consideration that we might 
             // wanna land somewhere higher/lower than the starting point, so
@@ -271,15 +334,16 @@ void AltitudeStartTask(void const * argument)
             // The vl53l0x doesn't need lowpass-filtering, so let's add upp all
             // altitude measuring sensors before it's fused together with
             // accelerometer data
-            baroAltitudeTot = (baro1AltitudeLpf + baro1AltitudeLpf) / 2; // TODO: change one baro1 to working baro2
+            baroAltitudeTot = (baro1AltitudeLpf + baro2AltitudeLpf + baro3AltitudeLpf) / 3; // TODO: change one baro1 to working baro2
             // If vl53l0x is within range but barometer out of range
             if((rangeAltitude <= MAX_VL53L0X_ALT) && (baroAltitudeTot < MIN_BARO_ALT)){
                 sensorsAltitude = rangeAltitude;
                 sensorsDt = rangeDt;
             }
             // If vl53l0x is out of range but barometer within range
+            // TODO: make sure VL53 return large values when out of range
             if((baroAltitudeTot >= MIN_BARO_ALT) && (rangeAltitude > MAX_VL53L0X_ALT)){
-                sensorsAltitude = rangeAltitude;
+                sensorsAltitude = baroAltitudeTot;
                 sensorsDt = baro1Dt;
             }
             // If vl53l0x and barometer within range, combine them in a 50cm transition
@@ -290,6 +354,9 @@ void AltitudeStartTask(void const * argument)
                 sensorsAltitude = Filter_Transition(rangeAltitude, baroAltitudeTot, damping);
                 sensorsDt = rangeDt;
             }
+            // TODO: TEST ONLY
+            sensorsAltitude = baroAltitudeTot;
+            sensorsDt = baro1Dt;
                 
             // Derive altitude and get velocity in cm/s
             static float baro1AltitudeLast;
@@ -298,7 +365,7 @@ void AltitudeStartTask(void const * argument)
             
             // Derive sensors altitude and get velocity in cm/s
             // TODO: find a better way to determine sensorsDt, since baro is
-            // sampled in 50Hz and vl53l0x in 25Hz
+            // sampled in 50Hz and vl53l0x in 25Hz <--- change to 50!
             static float sensorsAltitudeLast;
             sensorsVelocity = (sensorsAltitude - sensorsAltitudeLast) / sensorsDt;
             sensorsAltitudeLast = sensorsAltitude;
@@ -335,10 +402,10 @@ void AltitudeStartTask(void const * argument)
             // Position = initial position + (initial velocity * time) + (0.5 * acceleration * (time^2))
             tempAltitude = altitude + (tempVelocity * accDt) + (0.5 * accAccelerationLpf * accDt * accDt);
             // Calculate velocity using complimentary filter 
-            static float velCoeff = 0.999;
+            static float velCoeff = 1;//0.999;
             velocity = velCoeff * tempVelocity + (1 - velCoeff) * baro1VelocityLpf;
             // Calculate altitude with complimentary filter
-            static float altCoeff = 0.995;
+            static float altCoeff = 1;//0.995;
             altitude = altCoeff * tempAltitude + (1 - altCoeff) * baro1AltitudeLpf;
             
             // TODO: This block uses the combined laser and barometer data and can
@@ -361,14 +428,14 @@ void AltitudeStartTask(void const * argument)
         alt_quad_ptr->altitude = altitude;
         alt_quad_ptr->dt = accDt;
         //
-        osMailPut(myMailAltToQuadHandle, alt_quad_ptr);
-        /*MS5803Event = osMailGet(myMailMS5803ToAltHandle, 0);
+        osMailPut(mailAltToQuadHandle, alt_quad_ptr);
+        /*MS5803Event = osMailGet(mailMS5803ToAltHandle, 0);
         if (MS5803Event.status == osEventMail) {
         ms5803_ptr = MS5803Event.value.p;
         
         baro2 = ms5803_ptr->altitude;
         
-        osMailFree(myMailMS5803ToAltHandle, ms5803_ptr);
+        osMailFree(mailMS5803ToAltHandle, ms5803_ptr);
     }*/
         
         HAL_GPIO_WritePin(GPIOC, GPIO_PIN_3, GPIO_PIN_RESET);
@@ -377,7 +444,7 @@ void AltitudeStartTask(void const * argument)
 
 
 static uint32_t counter = 0;
-void TelemetryStartTask2(void const * argument)
+void Telemetry_StartTask2(void const * argument)
 {
     osDelay(6000);
 	while(1){
@@ -406,16 +473,29 @@ void TelemetryStartTask2(void const * argument)
             //UART_Print(" %.4f", totDt);
             //UART_Print(" %.4f", baro1AltitudeLpf);
             //UART_Print(" %.4f", baro2AltitudeLpf);
+            //UART_Print(" %.4f", baro3AltitudeLpf);
             //UART_Print(" %.4f", baroAltitudeTot);
             //------
             
             //----- Print to plot
-            UART_Print(" %.4f", totDt);
-            UART_Print(" %.4f", accAltitude);
-            UART_Print(" %.4f", rangeAltitude);
-            UART_Print(" %.4f", altitude2);
+            //UART_Print(" %.4f", totDt);
+            //UART_Print(" %.4f", accAltitude);
+            //UART_Print(" %.4f", rangeAltitude);
+            //UART_Print(" %.4f", altitude2);
             //------
             
+            //----- Print to plot
+            //UART_Print(" %.4f", totDt);
+            //UART_Print(" %.4f", accAltitude);
+            //UART_Print(" %.4f", altitude);
+            //UART_Print(" %.4f", altitude2); 
+            //------
+            
+            //----- Print to plot
+            UART_Print(" %.4f", totDt);
+            UART_Print(" %.4f", baro1AltitudeLpf);
+            UART_Print(" %.4f", 100 * baro1Altitude);
+            //------
             //UART_Print(" %.4f", totDt);
             //UART_Print(" %.4f", rangeRaw);
             

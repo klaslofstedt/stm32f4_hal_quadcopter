@@ -2,6 +2,23 @@
 #include "cmsis_os.h"
 #include "hardware.h"
 
+I2C_HandleTypeDef hi2c1;
+I2C_HandleTypeDef hi2c3;
+
+TIM_HandleTypeDef htim1;
+TIM_HandleTypeDef htim2;
+TIM_HandleTypeDef htim3;
+TIM_HandleTypeDef htim4;
+TIM_HandleTypeDef htim5;
+TIM_HandleTypeDef htim9;
+TIM_HandleTypeDef htim10;
+TIM_HandleTypeDef htim12;
+
+UART_HandleTypeDef huart5;
+UART_HandleTypeDef huart2;
+UART_HandleTypeDef huart6;
+
+
 /**
 * @brief System Clock Configuration
 * @retval None
@@ -107,11 +124,12 @@ void MX_TIM1_Init(void)
     TIM_MasterConfigTypeDef sMasterConfig;
     TIM_OC_InitTypeDef sConfigOC;
     TIM_BreakDeadTimeConfigTypeDef sBreakDeadTimeConfig;
-    
+    // timer / pwm / prescaler = period
+    // 168000000 / 400 / 7 = 60000 <- have to be smaller than 65535
     htim1.Instance = TIM1;
-    htim1.Init.Prescaler = 12 - 1;
+    htim1.Init.Prescaler = 6;//5;
     htim1.Init.CounterMode = TIM_COUNTERMODE_UP;
-    htim1.Init.Period = 55999; // ((168000000 / (250*12)) - 1)
+    htim1.Init.Period = 59999;//34999;
     htim1.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
     htim1.Init.RepetitionCounter = 0;
     if (HAL_TIM_Base_Init(&htim1) != HAL_OK)

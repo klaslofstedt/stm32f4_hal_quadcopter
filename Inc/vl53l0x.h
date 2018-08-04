@@ -27,7 +27,7 @@ typedef struct {
     float dt;
 } Vl53l0xRange_t;     
 
-void VL53L0XStartTask(void const * argument);
+void VL53L0X_StartTask(void const * argument);
 bool VL53L0X_Init();
 VL53L0X_Error rangingTest(VL53L0X_RangingMeasurementData_t* pRangingMeasurementData);
 VL53L0X_Error getSingleRangingMeasurement(VL53L0X_RangingMeasurementData_t* pRangingMeasurementData);

@@ -27,7 +27,7 @@ typedef struct {
 } Em7180Heading_t;
 
 
-void EM7180StartTask(void const * argument);
+void EM7180_StartTask(void const * argument);
 
 bool EM7180_Init();
 bool EM7180_EEPROM(void);
