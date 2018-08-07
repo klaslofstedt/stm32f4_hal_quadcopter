@@ -256,16 +256,16 @@ int main(void)
     HAL_TIM_IC_Start_IT(&htim12, TIM_CHANNEL_1);
     
     // Initialize ESCs TIM1 PE9, PE11, PE13, PE14
-    /*ESC_Init(TIM_CHANNEL_1);
-    //ESC_Init(TIM_CHANNEL_2);
+    ESC_Init(TIM_CHANNEL_1);
+    ESC_Init(TIM_CHANNEL_2);
     ESC_Init(TIM_CHANNEL_3);
-    //ESC_Init(TIM_CHANNEL_4);
+    ESC_Init(TIM_CHANNEL_4);
     
     ESC_SetSpeed(TIM_CHANNEL_1, 0);
-    //ESC_SetSpeed(TIM_CHANNEL_2, 0);
+    ESC_SetSpeed(TIM_CHANNEL_2, 0);
     ESC_SetSpeed(TIM_CHANNEL_3, 0);
-    //ESC_SetSpeed(TIM_CHANNEL_4, 0);
-    HAL_Delay(2000);*/
+    ESC_SetSpeed(TIM_CHANNEL_4, 0);
+    HAL_Delay(2000);
     
     // TODO: Remove these :)
     //ESC_SetSpeed(TIM_CHANNEL_1, 1.0f);
@@ -354,15 +354,15 @@ int main(void)
     
     /* definition and creation of TelemetryTask */
     osThreadDef(TelemetryTask, Telemetry_StartTask, osPriorityLow, 0, 256);
-    //TelemetryTaskHandle = osThreadCreate(osThread(TelemetryTask), NULL);
+    TelemetryTaskHandle = osThreadCreate(osThread(TelemetryTask), NULL);
     
     /* definition and creation of MS5803Task */
-    osThreadDef(MS5803Task, MS5803_StartTask, osPriorityNormal, 0, 256);
+    //osThreadDef(MS5803Task, MS5803_StartTask, osPriorityNormal, 0, 256);
     //MS5803TaskHandle = osThreadCreate(osThread(MS5803Task), NULL);
     
     /* definition and creation of TelemetryTask2 */
     osThreadDef(TelemetryTask2, Telemetry_StartTask2, osPriorityLow, 0, 256);
-    TelemetryTask2Handle = osThreadCreate(osThread(TelemetryTask2), NULL);
+    //TelemetryTask2Handle = osThreadCreate(osThread(TelemetryTask2), NULL);
     
     /* definition and creation of VL53L0XTask */
     osThreadDef(VL53L0XTask, VL53L0X_StartTask, osPriorityAboveNormal, 0, 256);
@@ -402,7 +402,6 @@ int main(void)
     /* USER CODE BEGIN WHILE */
     while (1)
     {
-        
         /* USER CODE END WHILE */
         
         /* USER CODE BEGIN 3 */
@@ -410,14 +409,14 @@ int main(void)
         HAL_Delay(1000);
     }
     /* USER CODE END 3 */
-    
 }
 
 float yawAngle, pitchAngle, rollAngle;
 float yawRate, pitchRate, rollRate;
 float altitude, altitudeVelocity;
 float attitudeDt, altitudeDt;
-float hover = 0.0f;
+float hover = 0.5f;
+bool arm = false;
 
 float esc1, esc2, esc3, esc4;
 
@@ -499,7 +498,7 @@ void Quadcopter_StartTask(void const * argument)
         float alt       = 0;//PID_Calc(&altitudePid);
         float x         = 0; //xPid.output;
         float y         = 0; //yPid.output;
-        hover     = 0.3;
+
         
         // Calculate the motor values
         // 1  front  4
@@ -509,15 +508,19 @@ void Quadcopter_StartTask(void const * argument)
         esc2 = hover + alt + roll - pitch - yaw - x + y;
         esc3 = hover + alt - roll - pitch + yaw - x - y;
         esc4 = hover + alt - roll + pitch - yaw + x - y;
-        //esc1 = /*HOVER_THRUST + altitudePid.output +*/ rollPid.output + pitchPid.output /*+ yawPid.output*/;
-        //esc2 = /*HOVER_THRUST + altitudePid.output +*/ rollPid.output - pitchPid.output /*- yawPid.output*/;
-        //esc3 = /*HOVER_THRUST + altitudePid.output */- rollPid.output - pitchPid.output /*+ yawPid.output*/;
-        //esc4 = /*HOVER_THRUST + altitudePid.output */- rollPid.output + pitchPid.output /*- yawPid.output*/;
         
-        /*ESC_SetSpeed(TIM_CHANNEL_1, esc1);
-        ESC_SetSpeed(TIM_CHANNEL_2, esc2);
-        ESC_SetSpeed(TIM_CHANNEL_3, esc3);
-        ESC_SetSpeed(TIM_CHANNEL_4, esc4);*/
+        // Feed motors only if armed
+        if(arm){
+            ESC_SetSpeed(TIM_CHANNEL_1, esc1);
+            ESC_SetSpeed(TIM_CHANNEL_2, esc2);
+            ESC_SetSpeed(TIM_CHANNEL_3, esc3);
+            ESC_SetSpeed(TIM_CHANNEL_4, esc4);
+        }else{
+            ESC_SetSpeed(TIM_CHANNEL_1, 0);
+            ESC_SetSpeed(TIM_CHANNEL_2, 0);
+            ESC_SetSpeed(TIM_CHANNEL_3, 0);
+            ESC_SetSpeed(TIM_CHANNEL_4, 0);
+        }
         
         // Set PID constants
         if(Joystick_ReadDuty(&yawJoystick) < 1200){
@@ -533,17 +536,19 @@ void Quadcopter_StartTask(void const * argument)
             //rollPid.k_p = rollPid.k_p + 0.00001;
         }
         if(Joystick_ReadDuty(&pitchJoystick) < 1200){
-            //
             pitchPid.k_d = pitchPid.k_d - 0.000001;
             //rollPid.k_d = rollPid.k_d - 0.00001;
         }
         if(Joystick_ReadDuty(&pitchJoystick) > 1700){
-            //
             pitchPid.k_d = pitchPid.k_d + 0.000001;
             //rollPid.k_d = rollPid.k_d + 0.00001;
         }
-        
-        
+        if(Joystick_ReadDuty(&rollJoystick) < 1200){
+            //
+            arm = !arm;
+            //pitchPid.k_d = pitchPid.k_d - 0.000001;
+            //rollPid.k_d = rollPid.k_d - 0.00001;
+        }        
         // Turn off LED
         HAL_GPIO_WritePin(GPIOC, GPIO_PIN_1, GPIO_PIN_RESET);
     }
@@ -599,14 +604,15 @@ void Telemetry_StartTask(void const * argument)
             //UART_Print(" a3: %.4f", a3);
             
             // Read joystick
-            /*UART_Print(" tim2: %.4f", Joystick_ReadDuty(&yawJoystick));
-            UART_Print(" tim3: %.4f", Joystick_ReadDuty(&pitchJoystick));
-            UART_Print(" tim4: %.4f", Joystick_ReadDuty(&rollJoystick));
+            //UART_Print(" hj: %.4f", Joystick_ReadDuty(&yawJoystick));
+            //UART_Print(" aj: %.4f", Joystick_ReadDuty(&pitchJoystick));
+            /*UART_Print(" tim4: %.4f", Joystick_ReadDuty(&rollJoystick));
             UART_Print(" tim5: %.4f", Joystick_ReadDuty(&thrustJoystick));
             UART_Print(" tim9: %.4f", Joystick_ReadDuty(&switchlJoystick));
             UART_Print(" tim12: %.4f", Joystick_ReadDuty(&switchrJoystick));
             */
-            //UART_Print(" hover: %.4f", hover);
+            UART_Print(" a: %d", arm);
+            UART_Print(" h: %.4f", hover);
             UART_Print(" p: %.6f", pitchPid.k_p);
             UART_Print(" d: %.6f", pitchPid.k_d);
             
