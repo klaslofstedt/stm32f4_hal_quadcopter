@@ -24,15 +24,26 @@ void ESC_SetSpeed(uint32_t channel, float speed)
 }
 
 
-void ESC_Init(uint32_t channel)
+void ESC_Init(void)
 {
-    HAL_TIM_PWM_Start(&htim1, channel);
+    HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1);
+    HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_2);
+    HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_3);
+    HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_4);
     HAL_Delay(500); // Maybe not needed
     
 	uint32_t pwm = (((SystemCoreClock/1000000) / (1 * TIM_PRESCALER)) * (ESC_INIT_HIGH));
-    __HAL_TIM_SET_COMPARE(&htim1, channel, pwm);
+    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, pwm);
+    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, pwm);
+    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, pwm);
+    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_4, pwm);
 	HAL_Delay(2500);
     
+    pwm = ((SystemCoreClock/1000000) / (1 * TIM_PRESCALER)) * ESC_MIN;
     // Set PWM to 0 before returning from function
-    __HAL_TIM_SET_COMPARE(&htim1, channel, 0);
+    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, pwm);
+    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, pwm);
+    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, pwm);
+    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_4, pwm);
+    HAL_Delay(2000);
 }

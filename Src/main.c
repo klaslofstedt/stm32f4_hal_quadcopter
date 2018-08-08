@@ -256,20 +256,17 @@ int main(void)
     HAL_TIM_IC_Start_IT(&htim12, TIM_CHANNEL_1);
     
     // Initialize ESCs TIM1 PE9, PE11, PE13, PE14
-    ESC_Init(TIM_CHANNEL_1);
-    ESC_Init(TIM_CHANNEL_2);
-    ESC_Init(TIM_CHANNEL_3);
-    ESC_Init(TIM_CHANNEL_4);
+    //ESC_Init(); // TODO: init with timer?
+    //ESC_Init(TIM_CHANNEL_1);
+    //ESC_Init(TIM_CHANNEL_2);
+    //ESC_Init(TIM_CHANNEL_3);
+    //ESC_Init(TIM_CHANNEL_4);
     
-    ESC_SetSpeed(TIM_CHANNEL_1, 0);
-    ESC_SetSpeed(TIM_CHANNEL_2, 0);
-    ESC_SetSpeed(TIM_CHANNEL_3, 0);
-    ESC_SetSpeed(TIM_CHANNEL_4, 0);
+    //ESC_SetSpeed(TIM_CHANNEL_1, 0);
+    //ESC_SetSpeed(TIM_CHANNEL_2, 0);
+    //ESC_SetSpeed(TIM_CHANNEL_3, 0);
+    //ESC_SetSpeed(TIM_CHANNEL_4, 0);
     HAL_Delay(2000);
-    
-    // TODO: Remove these :)
-    //ESC_SetSpeed(TIM_CHANNEL_1, 1.0f);
-    //ESC_SetSpeed(TIM_CHANNEL_2, 0.0f);
     
     // Initialize joystick
     Joystick_Init(&yawJoystick,     TIM2);  // PA1
@@ -354,7 +351,7 @@ int main(void)
     
     /* definition and creation of TelemetryTask */
     osThreadDef(TelemetryTask, Telemetry_StartTask, osPriorityLow, 0, 256);
-    TelemetryTaskHandle = osThreadCreate(osThread(TelemetryTask), NULL);
+    //TelemetryTaskHandle = osThreadCreate(osThread(TelemetryTask), NULL);
     
     /* definition and creation of MS5803Task */
     //osThreadDef(MS5803Task, MS5803_StartTask, osPriorityNormal, 0, 256);
@@ -362,7 +359,7 @@ int main(void)
     
     /* definition and creation of TelemetryTask2 */
     osThreadDef(TelemetryTask2, Telemetry_StartTask2, osPriorityLow, 0, 256);
-    //TelemetryTask2Handle = osThreadCreate(osThread(TelemetryTask2), NULL);
+    TelemetryTask2Handle = osThreadCreate(osThread(TelemetryTask2), NULL);
     
     /* definition and creation of VL53L0XTask */
     osThreadDef(VL53L0XTask, VL53L0X_StartTask, osPriorityAboveNormal, 0, 256);

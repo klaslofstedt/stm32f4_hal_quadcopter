@@ -200,7 +200,7 @@ void Altitude_StartTask(void const * argument)
         EM7180Event = osMailGet(mailEM7180ToAltHandle, osWaitForever);
         // Turn on LED
         HAL_GPIO_WritePin(GPIOC, GPIO_PIN_3, GPIO_PIN_SET);
-        
+
         if (EM7180Event.status == osEventMail) {
             pEm7180Attitude = EM7180Event.value.p;
             
@@ -256,7 +256,6 @@ void Altitude_StartTask(void const * argument)
             osMailFree(mailVL53L0XToAltHandle, pVl53l0xRange);
             //HAL_GPIO_WritePin(GPIOC, GPIO_PIN_3, GPIO_PIN_RESET);
         }
-        
         // Calculate accelerometer offset on the z-axis
         if(!accFilterAverage.ready){
             accFilterAverage.sample = accRaw;
@@ -402,10 +401,10 @@ void Altitude_StartTask(void const * argument)
             // Position = initial position + (initial velocity * time) + (0.5 * acceleration * (time^2))
             tempAltitude = altitude + (tempVelocity * accDt) + (0.5 * accAccelerationLpf * accDt * accDt);
             // Calculate velocity using complimentary filter 
-            static float velCoeff = 1;//0.999;
+            static float velCoeff = 0.999; // Bigger, closer to accelerometer
             velocity = velCoeff * tempVelocity + (1 - velCoeff) * baro1VelocityLpf;
             // Calculate altitude with complimentary filter
-            static float altCoeff = 1;//0.995;
+            static float altCoeff = 0.999;
             altitude = altCoeff * tempAltitude + (1 - altCoeff) * baro1AltitudeLpf;
             
             // TODO: This block uses the combined laser and barometer data and can
@@ -416,10 +415,10 @@ void Altitude_StartTask(void const * argument)
             // Position = initial position + (initial velocity * time) + (0.5 * acceleration * (time^2))
             tempAltitude2 = altitude2 + (tempVelocity2 * accDt) + (0.5 * accAccelerationLpf * accDt * accDt);
             // Calculate velocity using complimentary filter 
-            static float vel2Coeff = 0.99;
+            static float vel2Coeff = 0.999;
             velocity2 = vel2Coeff * tempVelocity2 + (1 - vel2Coeff) * sensorsVelocityLpf;
             // Calculate altitude with complimentary filter
-            static float alt2Coeff = 0.95;
+            static float alt2Coeff = 0.999;
             altitude2 = alt2Coeff * tempAltitude2 + (1 - alt2Coeff) * sensorsAltitude;
             //------------------------------
         }
@@ -449,7 +448,7 @@ void Telemetry_StartTask2(void const * argument)
     osDelay(6000);
 	while(1){
         osDelay(40); // TODO: osDelayUntil
-        if(counter < 250){
+        if(counter < 500){
             totDt += accDt;
             counter++;
             //UART_Print("Total %d", xPortGetMinimumEverFreeHeapSize());
@@ -485,16 +484,19 @@ void Telemetry_StartTask2(void const * argument)
             //------
             
             //----- Print to plot
-            //UART_Print(" %.4f", totDt);
-            //UART_Print(" %.4f", accAltitude);
-            //UART_Print(" %.4f", altitude);
-            //UART_Print(" %.4f", altitude2); 
+            UART_Print(" %.4f", totDt);
+            //UART_Print(" %.4f", 100 * baro1Altitude);
+            UART_Print(" %.4f", baro1AltitudeLpf);
+            UART_Print(" %.4f", baroAltitudeTot);
+            UART_Print(" %.4f", accAltitude);
+            UART_Print(" %.4f", altitude); 
+            UART_Print(" %.4f", altitude2);
             //------
             
             //----- Print to plot
-            UART_Print(" %.4f", totDt);
-            UART_Print(" %.4f", baro1AltitudeLpf);
-            UART_Print(" %.4f", 100 * baro1Altitude);
+            //UART_Print(" %.4f", totDt);
+            //UART_Print(" %.4f", baro1AltitudeLpf);
+            //UART_Print(" %.4f", 100 * baro1Altitude);
             //------
             //UART_Print(" %.4f", totDt);
             //UART_Print(" %.4f", rangeRaw);
