@@ -146,7 +146,7 @@ Joystick_t switchrJoystick;
 PID_t yawPid = {
     .boundary_max = 1.0f,
     .boundary_min = -1.0f,
-    .k_p = -0.003,
+    .k_p = -0.0035,
     .k_i = 0.0f,
     .k_d = 0.0
 };
@@ -154,17 +154,17 @@ PID_t yawPid = {
 PID_t pitchPid = {
     .boundary_max = 1.0f,
     .boundary_min = -1.0f,
-    .k_p = 0.0040,
+    .k_p = 0.0065f,
     .k_i = 0.000001f,
-    .k_d = 0.00020f
+    .k_d = 0.00025f
 };
 
 PID_t rollPid = {
     .boundary_max = 1.0f,
     .boundary_min = -1.0f,
-    .k_p = 0.0061,
+    .k_p = 0.0065f,
     .k_i = 0.000001f,
-    .k_d = 0.0004f
+    .k_d = 0.00025f
 };
 
 PID_t altitudePid = {
@@ -256,16 +256,16 @@ int main(void)
     HAL_TIM_IC_Start_IT(&htim12, TIM_CHANNEL_1);
     
     // Initialize ESCs TIM1 PE9, PE11, PE13, PE14
-    //ESC_Init(); // TODO: init with timer?
+    ESC_Init(); // TODO: init with timer?
     //ESC_Init(TIM_CHANNEL_1);
     //ESC_Init(TIM_CHANNEL_2);
     //ESC_Init(TIM_CHANNEL_3);
     //ESC_Init(TIM_CHANNEL_4);
     
-    //ESC_SetSpeed(TIM_CHANNEL_1, 0);
-    //ESC_SetSpeed(TIM_CHANNEL_2, 0);
-    //ESC_SetSpeed(TIM_CHANNEL_3, 0);
-    //ESC_SetSpeed(TIM_CHANNEL_4, 0);
+    /*ESC_SetSpeed(TIM_CHANNEL_1, 0);
+    ESC_SetSpeed(TIM_CHANNEL_2, 0);
+    ESC_SetSpeed(TIM_CHANNEL_3, 0);
+    ESC_SetSpeed(TIM_CHANNEL_4, 0);*/
     HAL_Delay(2000);
     
     // Initialize joystick
@@ -351,7 +351,7 @@ int main(void)
     
     /* definition and creation of TelemetryTask */
     osThreadDef(TelemetryTask, Telemetry_StartTask, osPriorityLow, 0, 256);
-    //TelemetryTaskHandle = osThreadCreate(osThread(TelemetryTask), NULL);
+    TelemetryTaskHandle = osThreadCreate(osThread(TelemetryTask), NULL);
     
     /* definition and creation of MS5803Task */
     //osThreadDef(MS5803Task, MS5803_StartTask, osPriorityNormal, 0, 256);
@@ -359,7 +359,7 @@ int main(void)
     
     /* definition and creation of TelemetryTask2 */
     osThreadDef(TelemetryTask2, Telemetry_StartTask2, osPriorityLow, 0, 256);
-    TelemetryTask2Handle = osThreadCreate(osThread(TelemetryTask2), NULL);
+    //TelemetryTask2Handle = osThreadCreate(osThread(TelemetryTask2), NULL);
     
     /* definition and creation of VL53L0XTask */
     osThreadDef(VL53L0XTask, VL53L0X_StartTask, osPriorityAboveNormal, 0, 256);
@@ -412,7 +412,7 @@ float yawAngle, pitchAngle, rollAngle;
 float yawRate, pitchRate, rollRate;
 float altitude, altitudeVelocity;
 float attitudeDt, altitudeDt;
-float hover = 0.5f;
+float hover = 0.7f;
 bool arm = false;
 
 float esc1, esc2, esc3, esc4;
@@ -467,6 +467,7 @@ void Quadcopter_StartTask(void const * argument)
         }
         
         // Build yaw PID object
+        // setpoint for yaw must be a counter ++ -- rather than a value
         yawPid.setpoint   = 0;//Joystick_ReadDuty(&yawJoystick);
         yawPid.input      = yawAngle;
         yawPid.rate       = yawRate;
@@ -490,8 +491,8 @@ void Quadcopter_StartTask(void const * argument)
         
         // Calculate PID values
         float pitch     = PID_Calc(&pitchPid);
-        float roll      = 0;//PID_Calc(&rollPid);
-        float yaw       = 0;//PID_Calc(&yawPid);
+        float roll      = PID_Calc(&rollPid);
+        float yaw       = PID_Calc(&yawPid);
         float alt       = 0;//PID_Calc(&altitudePid);
         float x         = 0; //xPid.output;
         float y         = 0; //yPid.output;
@@ -521,24 +522,24 @@ void Quadcopter_StartTask(void const * argument)
         
         // Set PID constants
         if(Joystick_ReadDuty(&yawJoystick) < 1200){
-            //
-            //hover = hover - 0.001;
-            pitchPid.k_p = pitchPid.k_p - 0.00001;
-            //rollPid.k_p = rollPid.k_p - 0.00001;
+            //pitchPid.k_d = pitchPid.k_d - 0.000001;
+            //rollPid.k_d = rollPid.k_d - 0.000001;
+            yawPid.k_p = yawPid.k_p - 0.000001;
         }
         if(Joystick_ReadDuty(&yawJoystick) > 1700){
-            //
-            //hover = hover + 0.001;
-            pitchPid.k_p = pitchPid.k_p + 0.00001;
-            //rollPid.k_p = rollPid.k_p + 0.00001;
+            //pitchPid.k_d = pitchPid.k_d + 0.000001;
+            //rollPid.k_d = rollPid.k_d + 0.000001;
+            yawPid.k_p = yawPid.k_p + 0.000001;
         }
         if(Joystick_ReadDuty(&pitchJoystick) < 1200){
-            pitchPid.k_d = pitchPid.k_d - 0.000001;
-            //rollPid.k_d = rollPid.k_d - 0.00001;
+            //hover = hover - 0.001;
+            //pitchPid.k_p = pitchPid.k_p - 0.00001;
+            //rollPid.k_p = rollPid.k_p - 0.00001;
         }
-        if(Joystick_ReadDuty(&pitchJoystick) > 1700){
-            pitchPid.k_d = pitchPid.k_d + 0.000001;
-            //rollPid.k_d = rollPid.k_d + 0.00001;
+        if(Joystick_ReadDuty(&pitchJoystick) > 1700){                        //
+            //hover = hover + 0.001;
+            //pitchPid.k_p = pitchPid.k_p + 0.00001;
+            //rollPid.k_p = rollPid.k_p + 0.00001;
         }
         if(Joystick_ReadDuty(&rollJoystick) < 1200){
             //
@@ -610,8 +611,9 @@ void Telemetry_StartTask(void const * argument)
             */
             UART_Print(" a: %d", arm);
             UART_Print(" h: %.4f", hover);
-            UART_Print(" p: %.6f", pitchPid.k_p);
-            UART_Print(" d: %.6f", pitchPid.k_d);
+            //UART_Print(" p: %.6f", pitchPid.k_p);
+            //UART_Print(" d: %.6f", pitchPid.k_d);
+            UART_Print(" p: %.6f", yawPid.k_p);
             
             UART_Print("\n\r");
         }
