@@ -255,6 +255,7 @@ int main(void)
     HAL_TIM_IC_Start_IT(&htim12, TIM_CHANNEL_2);
     HAL_TIM_IC_Start_IT(&htim12, TIM_CHANNEL_1);
     
+    UART_Print("Peripherals Initiated\n\r");
     // Initialize ESCs TIM1 PE9, PE11, PE13, PE14
     ESC_Init(); // TODO: init with timer?
     //ESC_Init(TIM_CHANNEL_1);
@@ -412,7 +413,7 @@ float yawAngle, pitchAngle, rollAngle;
 float yawRate, pitchRate, rollRate;
 float altitude, altitudeVelocity;
 float attitudeDt, altitudeDt;
-float hover = 0.7f;
+float hover = 0.55f;
 bool arm = false;
 
 float esc1, esc2, esc3, esc4;
@@ -468,7 +469,11 @@ void Quadcopter_StartTask(void const * argument)
         
         // Build yaw PID object
         // setpoint for yaw must be a counter ++ -- rather than a value
-        yawPid.setpoint   = 0;//Joystick_ReadDuty(&yawJoystick);
+        //yawPid.setpoint   = 0;//Joystick_ReadDuty(&yawJoystick);
+        if(yawAngle > 180){
+            yawAngle = yawAngle - 360;
+            yawRate = -yawRate;
+        }
         yawPid.input      = yawAngle;
         yawPid.rate       = yawRate;
         yawPid.dt         = attitudeDt;
@@ -509,11 +514,16 @@ void Quadcopter_StartTask(void const * argument)
         
         // Feed motors only if armed
         if(arm){
+            //
             ESC_SetSpeed(TIM_CHANNEL_1, esc1);
             ESC_SetSpeed(TIM_CHANNEL_2, esc2);
             ESC_SetSpeed(TIM_CHANNEL_3, esc3);
             ESC_SetSpeed(TIM_CHANNEL_4, esc4);
         }else{
+            // In order for the drone not to spin around yaw axis on ARM, set 
+            // the first setpoint value to the actual reading
+            yawPid.setpoint = yawAngle;
+            // No motor speed
             ESC_SetSpeed(TIM_CHANNEL_1, 0);
             ESC_SetSpeed(TIM_CHANNEL_2, 0);
             ESC_SetSpeed(TIM_CHANNEL_3, 0);
@@ -532,12 +542,12 @@ void Quadcopter_StartTask(void const * argument)
             yawPid.k_p = yawPid.k_p + 0.000001;
         }
         if(Joystick_ReadDuty(&pitchJoystick) < 1200){
-            //hover = hover - 0.001;
+            hover = hover - 0.001;
             //pitchPid.k_p = pitchPid.k_p - 0.00001;
             //rollPid.k_p = rollPid.k_p - 0.00001;
         }
-        if(Joystick_ReadDuty(&pitchJoystick) > 1700){                        //
-            //hover = hover + 0.001;
+        if(Joystick_ReadDuty(&pitchJoystick) > 1700){
+            hover = hover + 0.001;
             //pitchPid.k_p = pitchPid.k_p + 0.00001;
             //rollPid.k_p = rollPid.k_p + 0.00001;
         }
@@ -564,7 +574,7 @@ void Telemetry_StartTask(void const * argument)
         osDelay(500); // TODO: osDelayUntil
         HAL_GPIO_WritePin(GPIOC, GPIO_PIN_3, GPIO_PIN_SET);
         if(counter < 200000){
-            totDt += pitchPid.dt;
+            //totDt += pitchPid.dt;
             //counter++;
             //UART_Print(" range %d", range_mm);
             //UART_Print("Total %d", xPortGetMinimumEverFreeHeapSize());
@@ -572,27 +582,28 @@ void Telemetry_StartTask(void const * argument)
             //UART_Print(" gy: %.4f", gyro_y);
             //UART_Print(" gz: %.4f", gyro_z);
             
-            //UART_Print(" y: %.4f", yawAngle);
+            UART_Print(" y: %.4f", yawAngle);
+            UART_Print(" ys: %.4f", yawPid.setpoint); 
             //UART_Print(" p: %.4f", pitchAngle);
             //UART_Print(" r: %.4f", rollAngle);
-            //UART_Print(" a: %.4f", altitude);
+            UART_Print(" a: %.4f", altitude);
             
             //UART_Print(" %.4f", totDt);
             //UART_Print(" %.4f", pitchAngle);
             //UART_Print(" %.8f", pitchRate);
             //UART_Print(" %.4f", pitchPid.rate_calc);
             
-            /*UART_Print(" rollP %.4f", rollPid.output);
-            UART_Print(" pitchP %.4f", pitchPid.output);
-            UART_Print(" yawP %.8f", yawPid.output);
-            UART_Print(" altP %.4f", altitudePid.output);
+            //UART_Print(" rollP %.4f", rollPid.output);
+            //UART_Print(" pitchP %.4f", pitchPid.output);
+            //UART_Print(" yawP %.8f", yawPid.output);
+            //UART_Print(" altP %.4f", altitudePid.output);
             
             
             
-            UART_Print(" esc1 %.4f", esc1);
-            UART_Print(" esc2 %.4f", esc2);
-            UART_Print(" esc3 %.4f", esc3);
-            UART_Print(" esc4 %.4f", esc4);*/
+            //UART_Print(" esc1 %.4f", esc1);
+            //UART_Print(" esc2 %.4f", esc2);
+            //UART_Print(" esc3 %.4f", esc3);
+            //UART_Print(" esc4 %.4f", esc4);
             
             //input_pwm_ch1 = TIM1->CCR1;
             //input_pwm_ch2 = TIM1->CCR2;
@@ -611,9 +622,9 @@ void Telemetry_StartTask(void const * argument)
             */
             UART_Print(" a: %d", arm);
             UART_Print(" h: %.4f", hover);
-            //UART_Print(" p: %.6f", pitchPid.k_p);
-            //UART_Print(" d: %.6f", pitchPid.k_d);
-            UART_Print(" p: %.6f", yawPid.k_p);
+            //UART_Print(" p: %.6f", yawPid.k_p);
+            //UART_Print(" d: %.6f", yawPid.k_d);
+            //UART_Print(" p: %.6f", yawPid.k_p);
             
             UART_Print("\n\r");
         }

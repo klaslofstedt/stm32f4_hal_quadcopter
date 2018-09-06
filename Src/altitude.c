@@ -423,8 +423,8 @@ void Altitude_StartTask(void const * argument)
             //------------------------------
         }
         // TODO: assign data with laser
-        alt_quad_ptr->velocity = velocity;
-        alt_quad_ptr->altitude = altitude;
+        alt_quad_ptr->velocity = velocity2;
+        alt_quad_ptr->altitude = altitude2;
         alt_quad_ptr->dt = accDt;
         //
         osMailPut(mailAltToQuadHandle, alt_quad_ptr);
